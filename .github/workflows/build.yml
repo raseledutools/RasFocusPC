@@ -24,7 +24,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
 
       - name: Setup Rust (stable)
         uses: dtolnay/rust-toolchain@stable
@@ -38,7 +37,8 @@ jobs:
 
       - name: Install frontend dependencies
         id: npm_install
-        run: npm ci 2>&1 | Tee-Object -FilePath npm-install.log
+        shell: pwsh
+        run: npm install 2>&1 | Tee-Object -FilePath npm-install.log
         continue-on-error: true
 
       - name: Build Tauri app
@@ -102,7 +102,6 @@ jobs:
           NPM INSTALL LOG:
           ================================================================
           "@
-
           $content | Out-File -FilePath $logFile -Encoding utf8
 
           if (Test-Path "npm-install.log") {
@@ -114,20 +113,18 @@ jobs:
           @"
 
           ================================================================
-          CARGO / RUST BUILD LOG (last 300 lines):
+          CARGO / RUST BUILD LOG:
           ================================================================
           "@ | Out-File -FilePath $logFile -Append -Encoding utf8
 
-          # Collect cargo logs from temp and target dirs
           $cargoLogs = Get-ChildItem -Path "src-tauri/target" -Recurse -Filter "*.log" -ErrorAction SilentlyContinue |
             Sort-Object LastWriteTime -Descending | Select-Object -First 5
           foreach ($log in $cargoLogs) {
             "--- $($log.FullName) ---" | Out-File -FilePath $logFile -Append -Encoding utf8
             Get-Content $log.FullName -Tail 100 | Out-File -FilePath $logFile -Append -Encoding utf8
           }
-
           if ($cargoLogs.Count -eq 0) {
-            "No cargo log files found in target directory." | Out-File -FilePath $logFile -Append -Encoding utf8
+            "No cargo log files found." | Out-File -FilePath $logFile -Append -Encoding utf8
           }
 
           @"
@@ -142,7 +139,7 @@ jobs:
           "Rust: $(rustc --version 2>&1)" | Out-File -FilePath $logFile -Append -Encoding utf8
           "Cargo: $(cargo --version 2>&1)" | Out-File -FilePath $logFile -Append -Encoding utf8
 
-          Write-Host "Log written to: $logFile"
+          Write-Host "Log written: $logFile"
 
       - name: Upload error log to repo
         if: failure() || steps.npm_install.outcome == 'failure' || steps.tauri_build.outcome == 'failure'
@@ -150,9 +147,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-
           git pull --rebase origin ${{ github.ref_name }} 2>&1 | Write-Host
-
           git add build-logs/
           git commit -m "ci: error log — run #${{ github.run_number }} [skip ci]"
           git push origin HEAD:${{ github.ref_name }}
