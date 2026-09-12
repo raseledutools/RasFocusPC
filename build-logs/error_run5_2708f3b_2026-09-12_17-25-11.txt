@@ -1,0 +1,56 @@
+================================================================
+RasFocus PC Build Error Log
+================================================================
+Run Number  : 5
+Commit SHA  : 2708f3b2c992e0987279c40b48283665e2f152ae
+Branch      : main
+Triggered by: raseledutools
+Timestamp   : 2026-09-12_17-25-11
+Runner OS   : Windows
+================================================================
+
+STEP RESULTS:
+- npm_install : success
+- tauri_build : failure
+
+================================================================
+NPM INSTALL LOG:
+================================================================
+
+added 72 packages, and audited 73 packages in 4s
+
+9 packages are looking for funding
+  run `npm fund` for details
+
+2 vulnerabilities (1 moderate, 1 high)
+
+To address all issues (including breaking changes), run:
+  npm audit fix --force
+
+Run `npm audit` for details.
+
+================================================================
+CARGO / RUST BUILD LOG (last 300 lines):
+================================================================
+
+> ras-focus-pc@1.0.0 tauri
+> tauri build
+
+failed to run 'cargo metadata' command to get workspace directory: failed to run command cargo metadata: error: failed to parse manifest at `D:\a\RasFocusPC\RasFocusPC\src-tauri\Cargo.toml`
+
+Caused by:
+  can't find library `ras_focus_pc_lib`, rename file to `src/lib.rs` or specify lib.path
+
+       Error failed to run 'cargo metadata' command to get workspace directory: failed to run command cargo metadata: error: failed to parse manifest at `D:\a\RasFocusPC\RasFocusPC\src-tauri\Cargo.toml`
+
+Caused by:
+  can't find library `ras_focus_pc_lib`, rename file to `src/lib.rs` or specify lib.path
+
+
+================================================================
+ENVIRONMENT:
+================================================================
+Node  : v20.20.2
+NPM   : 10.8.2
+Rust  : rustc 1.98.1 (48a229cea 2026-09-01)
+Cargo : cargo 1.98.1 (797e8a9bc 2026-08-05)
