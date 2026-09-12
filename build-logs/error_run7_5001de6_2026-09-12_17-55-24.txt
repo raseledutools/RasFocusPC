@@ -1,0 +1,131 @@
+================================================================
+RasFocus PC Build Error Log
+================================================================
+Run Number  : 7
+Commit SHA  : 5001de66677a3f789e95770b2aa337d91ceecd1e
+Branch      : main
+Triggered by: raseledutools
+Timestamp   : 2026-09-12_17-55-24
+Runner OS   : Windows
+================================================================
+
+STEP RESULTS:
+- npm_install : success
+- tauri_build : failure
+
+================================================================
+NPM INSTALL LOG:
+================================================================
+
+added 72 packages, and audited 73 packages in 4s
+
+9 packages are looking for funding
+  run `npm fund` for details
+
+2 vulnerabilities (1 moderate, 1 high)
+
+To address all issues (including breaking changes), run:
+  npm audit fix --force
+
+Run `npm audit` for details.
+
+================================================================
+CARGO / RUST BUILD LOG (last 300 lines):
+================================================================
+
+> ras-focus-pc@1.0.0 tauri
+> tauri build
+
+        Info Looking up installed tauri packages to check mismatched versions...
+     Running beforeBuildCommand `npm run build`
+
+> ras-focus-pc@1.0.0 build
+> tsc && vite build
+
+[36mvite v5.4.21 [32mbuilding for production...[36m[39m
+transforming...
+[32m✓[39m 33 modules transformed.
+rendering chunks...
+computing gzip size...
+[2mdist/[22m[32mindex.html                 [39m[1m[2m  0.47 kB[22m[1m[22m[2m │ gzip:  0.30 kB[22m
+[2mdist/[22m[35massets/index-nWTw614z.css  [39m[1m[2m  7.07 kB[22m[1m[22m[2m │ gzip:  1.92 kB[22m
+[2mdist/[22m[36massets/index-JX1dYv1u.js   [39m[1m[2m152.02 kB[22m[1m[22m[2m │ gzip: 48.65 kB[22m
+[32m✓ built in 1.05s[39m
+    Updating crates.io index
+     Locking 460 packages to latest compatible versions
+      Adding generic-array v0.14.7 (available: v0.14.9)
+      Adding toml v0.8.2 (available: v0.8.23)
+      Adding toml_datetime v0.6.3 (available: v0.6.11)
+      Adding toml_edit v0.20.2 (available: v0.20.7)
+      Adding windows-sys v0.52.0 (available: v0.61.2)
+      Adding winreg v0.52.0 (available: v0.56.0)
+ Downloading crates ...
+  Downloaded windows-sys v0.52.0
+   Compiling ras-focus-pc v1.0.0 (D:\a\RasFocusPC\RasFocusPC\src-tauri)
+   Compiling windows-sys v0.52.0
+error[E0425]: cannot find function, tuple struct or tuple variant `OpenProcessToken` in module `windows_sys::Win32::Security`
+  --> src\main.rs:20:42
+   |
+20 |         if windows_sys::Win32::Security::OpenProcessToken(
+   |                                          ^^^^^^^^^^^^^^^^ not found in `windows_sys::Win32::Security`
+
+warning: unused import: `BufReader`
+ --> src\blocker.rs:5:24
+  |
+5 | use std::io::{BufRead, BufReader, Write};
+  |                        ^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+error[E0308]: mismatched types
+   --> src\main.rs:31:13
+    |
+ 30 |         let result = windows_sys::Win32::Security::GetTokenInformation(
+    |                      ------------------------------------------------- arguments to this function are incorrect
+ 31 |             token,
+    |             ^^^^^ expected `isize`, found `*mut c_void`
+    |
+    = note:     expected type `isize`
+            found raw pointer `*mut c_void`
+note: function defined here
+   --> C:\Users\runneradmin\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\windows-sys-0.52.0\src\Windows\Win32\Security\mod.rs:183:106
+    |
+183 | ::windows_targets::link!("advapi32.dll" "system" #[doc = "Required features: `\"Win32_Foundation\"`"] fn GetTokenInformation(tokenh...
+    |                                                                                                          ^^^^^^^^^^^^^^^^^^^
+
+error[E0308]: mismatched types
+  --> src\main.rs:37:53
+   |
+37 |         windows_sys::Win32::Foundation::CloseHandle(token);
+   |         ------------------------------------------- ^^^^^ expected `isize`, found `*mut c_void`
+   |         |
+   |         arguments to this function are incorrect
+   |
+   = note:     expected type `isize`
+           found raw pointer `*mut c_void`
+note: function defined here
+  --> C:\Users\runneradmin\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\windows-sys-0.52.0\src\Windows\Win32\Foundation\mod.rs:1:53
+   |
+ 1 | ::windows_targets::link!("kernel32.dll" "system" fn CloseHandle(hobject : HANDLE) -> BOOL);
+   |                                                     ^^^^^^^^^^^
+
+warning: unused import: `BufRead`
+ --> src\blocker.rs:5:15
+  |
+5 | use std::io::{BufRead, BufReader, Write};
+  |               ^^^^^^^
+
+Some errors have detailed explanations: E0308, E0425.
+For more information about an error, try `rustc --explain E0308`.
+warning: `ras-focus-pc` (bin "ras-focus-pc") generated 2 warnings
+error: could not compile `ras-focus-pc` (bin "ras-focus-pc") due to 3 previous errors; 2 warnings emitted
+failed to build app: failed to build app
+       Error failed to build app: failed to build app
+
+================================================================
+ENVIRONMENT:
+================================================================
+Node  : v20.20.2
+NPM   : 10.8.2
+Rust  : rustc 1.98.1 (48a229cea 2026-09-01)
+Cargo : cargo 1.98.1 (797e8a9bc 2026-08-05)
