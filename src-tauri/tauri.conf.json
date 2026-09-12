@@ -24,14 +24,6 @@
       }
     ]
   },
-  "plugins": {
-    "updater": {
-      "pubkey": "",
-      "endpoints": [
-        "https://github.com/raseledutools/RasFocusPC/releases/latest/download/updater.json"
-      ]
-    }
-  },
   "bundle": {
     "active": true,
     "targets": ["nsis", "msi"],
