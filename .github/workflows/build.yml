@@ -35,7 +35,7 @@ jobs:
         with:
           workspaces: './src-tauri -> target'
           cache-on-failure: false
-          key: rust-v2
+          key: rust-v3
 
       - name: Install frontend dependencies
         id: npm_install
@@ -130,8 +130,7 @@ jobs:
             src-tauri/target/release/bundle/msi/*.msi
           if-no-files-found: warn
 
-      # ── Auto-updater: generate updater.json and attach to release ─────────────
-      - name: Generate updater.json and publish release
+      - name: Publish GitHub Release
         if: steps.tauri_build.outcome == 'success' && startsWith(github.ref, 'refs/tags/')
         shell: pwsh
         env:
@@ -142,25 +141,17 @@ jobs:
           $repo    = "${{ github.repository }}"
           $baseUrl = "https://github.com/${repo}/releases/download/${tag}"
 
-          # Find the NSIS installer (.exe) that was built
           $exeFile = Get-ChildItem "src-tauri/target/release/bundle/nsis" -Filter "*.exe" |
                      Select-Object -First 1
-          if (-not $exeFile) {
-            Write-Error "No NSIS installer found"; exit 1
-          }
+          if (-not $exeFile) { Write-Error "No NSIS installer found"; exit 1 }
 
-          # Compute SHA-256 of the installer
-          $hash = (Get-FileHash $exeFile.FullName -Algorithm SHA256).Hash.ToLower()
+          $hash        = (Get-FileHash $exeFile.FullName -Algorithm SHA256).Hash.ToLower()
+          $downloadUrl = "${baseUrl}/$($exeFile.Name)"
 
-          $exeName = $exeFile.Name
-          $downloadUrl = "${baseUrl}/${exeName}"
-
-          # Build the updater manifest (Tauri v2 format — no signature required
-          # when pubkey is left empty in tauri.conf.json)
           $manifest = @{
-            version  = $version
-            notes    = "See https://github.com/${repo}/releases/tag/${tag} for details."
-            pub_date = (Get-Date -Format "yyyy-MM-ddTHH:mm:ssZ")
+            version   = $version
+            notes     = "See https://github.com/${repo}/releases/tag/${tag} for details."
+            pub_date  = (Get-Date -Format "yyyy-MM-ddTHH:mm:ssZ")
             platforms = @{
               "windows-x86_64" = @{
                 url       = $downloadUrl
@@ -171,22 +162,10 @@ jobs:
           } | ConvertTo-Json -Depth 5
 
           $manifest | Set-Content -Path "updater.json" -Encoding utf8
-          Write-Host "updater.json written:"
-          Get-Content "updater.json"
 
-          # Create/update the GitHub release and upload both files
           gh release create $tag `
             --title "RasFocus PC $tag" `
-            --notes "## RasFocus PC ${tag}
-
-### What's new
-See commit history for changes.
-
-### Installation
-Download the \`.exe\` below, run as Administrator.
-
-### Auto-update
-Existing installs will detect this release automatically via the built-in updater." `
+            --notes "Download the .exe below and run as Administrator." `
             --latest `
             "$($exeFile.FullName)#RasFocusPC-${version}-setup.exe" `
             "updater.json#updater.json" 2>&1 || `
