@@ -43,8 +43,94 @@ jobs:
 
       - name: Build Tauri app
         id: tauri_build
-        uses: tauri-apps/tauri-action@v0
+        shell: pwsh
+        run: |
+          npm run tauri build 2>&1 | Tee-Object -FilePath tauri-build.log
         continue-on-error: true
+
+      - name: Collect and upload error log
+        if: steps.npm_install.outcome == 'failure' || steps.tauri_build.outcome == 'failure'
+        shell: pwsh
+        run: |
+          $timestamp = Get-Date -Format "yyyy-MM-dd_HH-mm-ss"
+          $sha = "${{ github.sha }}".Substring(0, 7)
+          $logFile = "build-logs/error_run${{ github.run_number }}_${sha}_${timestamp}.txt"
+          New-Item -ItemType Directory -Force -Path "build-logs" | Out-Null
+
+          @"
+================================================================
+RasFocus PC — Build Error Log
+================================================================
+Run     : #${{ github.run_number }}
+SHA     : ${{ github.sha }}
+Branch  : ${{ github.ref_name }}
+Actor   : ${{ github.actor }}
+Time    : $timestamp
+OS      : ${{ runner.os }}
+================================================================
+STEP RESULTS:
+  npm_install  -> ${{ steps.npm_install.outcome }}
+  tauri_build  -> ${{ steps.tauri_build.outcome }}
+
+================================================================
+NODE / NPM INSTALL LOG:
+================================================================
+"@ | Out-File $logFile -Encoding utf8
+
+          if (Test-Path "npm-install.log") {
+            Get-Content "npm-install.log" | Out-File $logFile -Append -Encoding utf8
+          }
+
+          @"
+
+================================================================
+TAURI / CARGO BUILD LOG:
+================================================================
+"@ | Out-File $logFile -Append -Encoding utf8
+
+          if (Test-Path "tauri-build.log") {
+            Get-Content "tauri-build.log" | Out-File $logFile -Append -Encoding utf8
+          }
+
+          # Also grab any cargo stderr logs
+          Get-ChildItem "src-tauri/target" -Recurse -Filter "*.log" -ErrorAction SilentlyContinue |
+            Sort-Object LastWriteTime -Descending | Select-Object -First 3 | ForEach-Object {
+              "`n--- $($_.FullName) ---" | Out-File $logFile -Append -Encoding utf8
+              Get-Content $_.FullName -Tail 80 | Out-File $logFile -Append -Encoding utf8
+            }
+
+          @"
+
+================================================================
+ENVIRONMENT:
+================================================================
+Node  : $(node --version)
+NPM   : $(npm --version)
+Rust  : $(rustc --version 2>&1)
+Cargo : $(cargo --version 2>&1)
+"@ | Out-File $logFile -Append -Encoding utf8
+
+          # Commit to repo
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git pull --rebase origin ${{ github.ref_name }} 2>&1
+          git add build-logs/
+          git commit -m "ci: error log run #${{ github.run_number }} [skip ci]"
+          git push origin HEAD:${{ github.ref_name }}
+
+      - name: Upload installer as artifact
+        if: steps.tauri_build.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: RasFocusPC-installer
+          path: |
+            src-tauri/target/release/bundle/nsis/*.exe
+            src-tauri/target/release/bundle/msi/*.msi
+          if-no-files-found: warn
+
+      - name: Create GitHub Release
+        if: steps.tauri_build.outcome == 'success' && startsWith(github.ref, 'refs/tags/')
+        uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
@@ -53,107 +139,20 @@ jobs:
           releaseBody: |
             ## RasFocus PC — Windows Website Blocker
 
-            ### What's included:
+            ### Features:
             - 🔞 Adult content blocker
-            - 📱 Social media blocker (Facebook, Instagram, TikTok, Twitter, Reddit...)
+            - 📱 Social media blocker
             - 📺 YouTube Shorts blocker
             - 🎰 Gambling site blocker
             - ✏️ Custom domain blocking
             - 🕐 Scheduled blocking
 
-            ### Installation:
-            1. Download the `.exe` (NSIS installer) or `.msi` below
-            2. Right-click → **Run as Administrator**
-            3. Install and launch
-
-            > ⚠️ **Must run as Administrator** to modify the Windows hosts file.
+            > ⚠️ Run as Administrator to modify Windows hosts file.
           releaseDraft: false
           prerelease: false
-          includeUpdaterJson: false
 
-      - name: Collect error logs
-        if: failure() || steps.npm_install.outcome == 'failure' || steps.tauri_build.outcome == 'failure'
-        shell: pwsh
-        run: |
-          $timestamp = Get-Date -Format "yyyy-MM-dd_HH-mm-ss"
-          $runNumber = "${{ github.run_number }}"
-          $sha = "${{ github.sha }}".Substring(0, 7)
-          $logFile = "build-logs/error_run${runNumber}_${sha}_${timestamp}.txt"
-
-          New-Item -ItemType Directory -Force -Path "build-logs" | Out-Null
-
-          $content = @"
-          ================================================================
-          RasFocus PC Build Error Log
-          ================================================================
-          Run Number  : ${{ github.run_number }}
-          Commit SHA  : ${{ github.sha }}
-          Branch      : ${{ github.ref_name }}
-          Triggered by: ${{ github.actor }}
-          Timestamp   : $timestamp
-          Runner OS   : ${{ runner.os }}
-          ================================================================
-
-          STEP RESULTS:
-          - npm_install : ${{ steps.npm_install.outcome }}
-          - tauri_build : ${{ steps.tauri_build.outcome }}
-
-          ================================================================
-          NPM INSTALL LOG:
-          ================================================================
-          "@
-          $content | Out-File -FilePath $logFile -Encoding utf8
-
-          if (Test-Path "npm-install.log") {
-            Get-Content "npm-install.log" | Out-File -FilePath $logFile -Append -Encoding utf8
-          } else {
-            "No npm install log found." | Out-File -FilePath $logFile -Append -Encoding utf8
-          }
-
-          @"
-
-          ================================================================
-          CARGO / RUST BUILD LOG:
-          ================================================================
-          "@ | Out-File -FilePath $logFile -Append -Encoding utf8
-
-          $cargoLogs = Get-ChildItem -Path "src-tauri/target" -Recurse -Filter "*.log" -ErrorAction SilentlyContinue |
-            Sort-Object LastWriteTime -Descending | Select-Object -First 5
-          foreach ($log in $cargoLogs) {
-            "--- $($log.FullName) ---" | Out-File -FilePath $logFile -Append -Encoding utf8
-            Get-Content $log.FullName -Tail 100 | Out-File -FilePath $logFile -Append -Encoding utf8
-          }
-          if ($cargoLogs.Count -eq 0) {
-            "No cargo log files found." | Out-File -FilePath $logFile -Append -Encoding utf8
-          }
-
-          @"
-
-          ================================================================
-          ENVIRONMENT:
-          ================================================================
-          "@ | Out-File -FilePath $logFile -Append -Encoding utf8
-
-          "Node: $(node --version)" | Out-File -FilePath $logFile -Append -Encoding utf8
-          "NPM : $(npm --version)" | Out-File -FilePath $logFile -Append -Encoding utf8
-          "Rust: $(rustc --version 2>&1)" | Out-File -FilePath $logFile -Append -Encoding utf8
-          "Cargo: $(cargo --version 2>&1)" | Out-File -FilePath $logFile -Append -Encoding utf8
-
-          Write-Host "Log written: $logFile"
-
-      - name: Upload error log to repo
-        if: failure() || steps.npm_install.outcome == 'failure' || steps.tauri_build.outcome == 'failure'
-        shell: pwsh
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git pull --rebase origin ${{ github.ref_name }} 2>&1 | Write-Host
-          git add build-logs/
-          git commit -m "ci: error log — run #${{ github.run_number }} [skip ci]"
-          git push origin HEAD:${{ github.ref_name }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Fail job if build failed
+      - name: Fail if build failed
         if: steps.npm_install.outcome == 'failure' || steps.tauri_build.outcome == 'failure'
-        run: exit 1
+        run: |
+          echo "Build failed. Check build-logs/ in the repo."
+          exit 1

@@ -10,10 +10,6 @@
   },
   "app": {
     "withGlobalTauri": true,
-    "trayIcon": {
-      "iconPath": "icons/icon.png",
-      "iconAsTemplate": false
-    },
     "windows": [
       {
         "title": "RasFocus PC",
@@ -40,9 +36,7 @@
     ],
     "windows": {
       "nsis": {
-        "displayLanguageSelector": false,
-        "installerIcon": "icons/icon.ico",
-        "headerImage": null
+        "displayLanguageSelector": false
       }
     }
   }
