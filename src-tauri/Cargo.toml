@@ -1,0 +1,29 @@
+[package]
+name = "ras-focus-pc"
+version = "1.0.0"
+description = "RasFocus PC - Website & App Blocker"
+authors = ["Rasel"]
+license = "MIT"
+repository = ""
+edition = "2021"
+
+[lib]
+name = "ras_focus_pc_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "ras-focus-pc"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-shell = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+regex = "1"
+chrono = { version = "0.4", features = ["serde"] }
+tokio = { version = "1", features = ["full"] }
+winreg = "0.52"

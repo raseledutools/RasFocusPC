@@ -1,0 +1,66 @@
+name: Build RasFocus PC
+
+on:
+  push:
+    branches: [main, master]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Setup Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build Tauri app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: 'RasFocus PC ${{ github.ref_name }}'
+          releaseBody: |
+            ## RasFocus PC — Windows Website Blocker
+
+            ### What's included:
+            - 🔞 Adult content blocker
+            - 📱 Social media blocker (Facebook, Instagram, TikTok, Twitter, Reddit...)
+            - 📺 YouTube Shorts blocker
+            - 🎰 Gambling site blocker
+            - ✏️ Custom domain blocking
+            - 🕐 Scheduled blocking
+
+            ### Installation:
+            1. Download the `.exe` (NSIS installer) or `.msi` below
+            2. Right-click → **Run as Administrator**
+            3. Install and launch
+
+            > ⚠️ **Must run as Administrator** to modify the Windows hosts file.
+          releaseDraft: false
+          prerelease: false
+          includeUpdaterJson: false
