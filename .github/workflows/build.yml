@@ -17,6 +17,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -35,10 +37,14 @@ jobs:
           workspaces: './src-tauri -> target'
 
       - name: Install frontend dependencies
-        run: npm ci
+        id: npm_install
+        run: npm ci 2>&1 | Tee-Object -FilePath npm-install.log
+        continue-on-error: true
 
       - name: Build Tauri app
+        id: tauri_build
         uses: tauri-apps/tauri-action@v0
+        continue-on-error: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
@@ -64,3 +70,95 @@ jobs:
           releaseDraft: false
           prerelease: false
           includeUpdaterJson: false
+
+      - name: Collect error logs
+        if: failure() || steps.npm_install.outcome == 'failure' || steps.tauri_build.outcome == 'failure'
+        shell: pwsh
+        run: |
+          $timestamp = Get-Date -Format "yyyy-MM-dd_HH-mm-ss"
+          $runNumber = "${{ github.run_number }}"
+          $sha = "${{ github.sha }}".Substring(0, 7)
+          $logFile = "build-logs/error_run${runNumber}_${sha}_${timestamp}.txt"
+
+          New-Item -ItemType Directory -Force -Path "build-logs" | Out-Null
+
+          $content = @"
+          ================================================================
+          RasFocus PC Build Error Log
+          ================================================================
+          Run Number  : ${{ github.run_number }}
+          Commit SHA  : ${{ github.sha }}
+          Branch      : ${{ github.ref_name }}
+          Triggered by: ${{ github.actor }}
+          Timestamp   : $timestamp
+          Runner OS   : ${{ runner.os }}
+          ================================================================
+
+          STEP RESULTS:
+          - npm_install : ${{ steps.npm_install.outcome }}
+          - tauri_build : ${{ steps.tauri_build.outcome }}
+
+          ================================================================
+          NPM INSTALL LOG:
+          ================================================================
+          "@
+
+          $content | Out-File -FilePath $logFile -Encoding utf8
+
+          if (Test-Path "npm-install.log") {
+            Get-Content "npm-install.log" | Out-File -FilePath $logFile -Append -Encoding utf8
+          } else {
+            "No npm install log found." | Out-File -FilePath $logFile -Append -Encoding utf8
+          }
+
+          @"
+
+          ================================================================
+          CARGO / RUST BUILD LOG (last 300 lines):
+          ================================================================
+          "@ | Out-File -FilePath $logFile -Append -Encoding utf8
+
+          # Collect cargo logs from temp and target dirs
+          $cargoLogs = Get-ChildItem -Path "src-tauri/target" -Recurse -Filter "*.log" -ErrorAction SilentlyContinue |
+            Sort-Object LastWriteTime -Descending | Select-Object -First 5
+          foreach ($log in $cargoLogs) {
+            "--- $($log.FullName) ---" | Out-File -FilePath $logFile -Append -Encoding utf8
+            Get-Content $log.FullName -Tail 100 | Out-File -FilePath $logFile -Append -Encoding utf8
+          }
+
+          if ($cargoLogs.Count -eq 0) {
+            "No cargo log files found in target directory." | Out-File -FilePath $logFile -Append -Encoding utf8
+          }
+
+          @"
+
+          ================================================================
+          ENVIRONMENT:
+          ================================================================
+          "@ | Out-File -FilePath $logFile -Append -Encoding utf8
+
+          "Node: $(node --version)" | Out-File -FilePath $logFile -Append -Encoding utf8
+          "NPM : $(npm --version)" | Out-File -FilePath $logFile -Append -Encoding utf8
+          "Rust: $(rustc --version 2>&1)" | Out-File -FilePath $logFile -Append -Encoding utf8
+          "Cargo: $(cargo --version 2>&1)" | Out-File -FilePath $logFile -Append -Encoding utf8
+
+          Write-Host "Log written to: $logFile"
+
+      - name: Upload error log to repo
+        if: failure() || steps.npm_install.outcome == 'failure' || steps.tauri_build.outcome == 'failure'
+        shell: pwsh
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git pull --rebase origin ${{ github.ref_name }} 2>&1 | Write-Host
+
+          git add build-logs/
+          git commit -m "ci: error log — run #${{ github.run_number }} [skip ci]"
+          git push origin HEAD:${{ github.ref_name }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Fail job if build failed
+        if: steps.npm_install.outcome == 'failure' || steps.tauri_build.outcome == 'failure'
+        run: exit 1
