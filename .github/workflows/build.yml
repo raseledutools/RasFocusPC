@@ -44,8 +44,7 @@ jobs:
       - name: Build Tauri app
         id: tauri_build
         shell: pwsh
-        run: |
-          npm run tauri build 2>&1 | Tee-Object -FilePath tauri-build.log
+        run: npm run tauri build 2>&1 | Tee-Object -FilePath tauri-build.log
         continue-on-error: true
 
       - name: Collect and upload error log
@@ -57,60 +56,61 @@ jobs:
           $logFile = "build-logs/error_run${{ github.run_number }}_${sha}_${timestamp}.txt"
           New-Item -ItemType Directory -Force -Path "build-logs" | Out-Null
 
-          @"
-================================================================
-RasFocus PC — Build Error Log
-================================================================
-Run     : #${{ github.run_number }}
-SHA     : ${{ github.sha }}
-Branch  : ${{ github.ref_name }}
-Actor   : ${{ github.actor }}
-Time    : $timestamp
-OS      : ${{ runner.os }}
-================================================================
-STEP RESULTS:
-  npm_install  -> ${{ steps.npm_install.outcome }}
-  tauri_build  -> ${{ steps.tauri_build.outcome }}
-
-================================================================
-NODE / NPM INSTALL LOG:
-================================================================
-"@ | Out-File $logFile -Encoding utf8
+          $lines = @(
+            "================================================================",
+            "RasFocus PC Build Error Log",
+            "================================================================",
+            "Run Number  : ${{ github.run_number }}",
+            "Commit SHA  : ${{ github.sha }}",
+            "Branch      : ${{ github.ref_name }}",
+            "Triggered by: ${{ github.actor }}",
+            "Timestamp   : $timestamp",
+            "Runner OS   : ${{ runner.os }}",
+            "================================================================",
+            "",
+            "STEP RESULTS:",
+            "- npm_install : ${{ steps.npm_install.outcome }}",
+            "- tauri_build : ${{ steps.tauri_build.outcome }}",
+            "",
+            "================================================================",
+            "NPM INSTALL LOG:",
+            "================================================================"
+          )
+          $lines | Set-Content -Path $logFile -Encoding utf8
 
           if (Test-Path "npm-install.log") {
-            Get-Content "npm-install.log" | Out-File $logFile -Append -Encoding utf8
+            Get-Content "npm-install.log" | Add-Content -Path $logFile -Encoding utf8
+          } else {
+            Add-Content -Path $logFile -Value "No npm install log found." -Encoding utf8
           }
 
-          @"
-
-================================================================
-TAURI / CARGO BUILD LOG:
-================================================================
-"@ | Out-File $logFile -Append -Encoding utf8
+          "" | Add-Content -Path $logFile -Encoding utf8
+          "================================================================" | Add-Content -Path $logFile -Encoding utf8
+          "CARGO / RUST BUILD LOG (last 300 lines):" | Add-Content -Path $logFile -Encoding utf8
+          "================================================================" | Add-Content -Path $logFile -Encoding utf8
 
           if (Test-Path "tauri-build.log") {
-            Get-Content "tauri-build.log" | Out-File $logFile -Append -Encoding utf8
+            Get-Content "tauri-build.log" -Tail 300 | Add-Content -Path $logFile -Encoding utf8
+          } else {
+            "No tauri-build log found." | Add-Content -Path $logFile -Encoding utf8
           }
 
-          # Also grab any cargo stderr logs
           Get-ChildItem "src-tauri/target" -Recurse -Filter "*.log" -ErrorAction SilentlyContinue |
             Sort-Object LastWriteTime -Descending | Select-Object -First 3 | ForEach-Object {
-              "`n--- $($_.FullName) ---" | Out-File $logFile -Append -Encoding utf8
-              Get-Content $_.FullName -Tail 80 | Out-File $logFile -Append -Encoding utf8
+              "" | Add-Content -Path $logFile -Encoding utf8
+              "--- $($_.FullName) ---" | Add-Content -Path $logFile -Encoding utf8
+              Get-Content $_.FullName -Tail 80 | Add-Content -Path $logFile -Encoding utf8
             }
 
-          @"
+          "" | Add-Content -Path $logFile -Encoding utf8
+          "================================================================" | Add-Content -Path $logFile -Encoding utf8
+          "ENVIRONMENT:" | Add-Content -Path $logFile -Encoding utf8
+          "================================================================" | Add-Content -Path $logFile -Encoding utf8
+          "Node  : $(node --version)" | Add-Content -Path $logFile -Encoding utf8
+          "NPM   : $(npm --version)" | Add-Content -Path $logFile -Encoding utf8
+          "Rust  : $(rustc --version 2>&1)" | Add-Content -Path $logFile -Encoding utf8
+          "Cargo : $(cargo --version 2>&1)" | Add-Content -Path $logFile -Encoding utf8
 
-================================================================
-ENVIRONMENT:
-================================================================
-Node  : $(node --version)
-NPM   : $(npm --version)
-Rust  : $(rustc --version 2>&1)
-Cargo : $(cargo --version 2>&1)
-"@ | Out-File $logFile -Append -Encoding utf8
-
-          # Commit to repo
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git pull --rebase origin ${{ github.ref_name }} 2>&1
@@ -137,22 +137,23 @@ Cargo : $(cargo --version 2>&1)
           tagName: ${{ github.ref_name }}
           releaseName: 'RasFocus PC ${{ github.ref_name }}'
           releaseBody: |
-            ## RasFocus PC — Windows Website Blocker
+            ## RasFocus PC - Windows Website Blocker
 
             ### Features:
-            - 🔞 Adult content blocker
-            - 📱 Social media blocker
-            - 📺 YouTube Shorts blocker
-            - 🎰 Gambling site blocker
-            - ✏️ Custom domain blocking
-            - 🕐 Scheduled blocking
+            - Adult content blocker
+            - Social media blocker
+            - YouTube Shorts blocker
+            - Gambling site blocker
+            - Custom domain blocking
+            - Scheduled blocking
 
-            > ⚠️ Run as Administrator to modify Windows hosts file.
+            > Run as Administrator to modify Windows hosts file.
           releaseDraft: false
           prerelease: false
 
       - name: Fail if build failed
         if: steps.npm_install.outcome == 'failure' || steps.tauri_build.outcome == 'failure'
+        shell: pwsh
         run: |
-          echo "Build failed. Check build-logs/ in the repo."
+          Write-Host "Build failed. Check build-logs/ in the repo."
           exit 1
