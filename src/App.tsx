@@ -415,13 +415,14 @@ export default function App() {
               background: "var(--danger-soft)",
               border: "1px solid var(--danger)",
               borderRadius: 6,
-              padding: "4px 10px",
+              padding: "6px 12px",
               fontSize: 11,
               color: "var(--danger)",
-              maxWidth: 300,
+              maxWidth: 340,
+              lineHeight: 1.5,
             }}
           >
-            ⚠️ {error} — Run as Administrator
+            ⚠️ <strong>Admin access needed.</strong> Right-click RasFocus PC → "Run as Administrator"
           </div>
         )}
         <div

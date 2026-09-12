@@ -140,6 +140,42 @@ fn get_presets_map() -> HashMap<String, Preset> {
     );
 
     map.insert(
+        "youtube_ads".to_string(),
+        Preset {
+            id: "youtube_ads".to_string(),
+            name: "YouTube (Ads-Free)".to_string(),
+            description: "Blocks YouTube ad servers — YouTube still works, ads don't load".to_string(),
+            icon: "🚫".to_string(),
+            domains: vec![
+                // Google ad delivery & tracking
+                "googleadservices.com".to_string(),
+                "www.googleadservices.com".to_string(),
+                "googlesyndication.com".to_string(),
+                "www.googlesyndication.com".to_string(),
+                "doubleclick.net".to_string(),
+                "www.doubleclick.net".to_string(),
+                "ad.doubleclick.net".to_string(),
+                "pagead2.googlesyndication.com".to_string(),
+                "googleads.g.doubleclick.net".to_string(),
+                "www.googletagservices.com".to_string(),
+                "googletagservices.com".to_string(),
+                // YouTube ad endpoints
+                "ads.youtube.com".to_string(),
+                "www.ads.youtube.com".to_string(),
+                // Google marketing/analytics used for ad targeting
+                "marketingplatform.google.com".to_string(),
+                "adservice.google.com".to_string(),
+                "adservice.google.com.bd".to_string(),
+                // Additional ad networks
+                "ade.googlesyndication.com".to_string(),
+                "tpc.googlesyndication.com".to_string(),
+                "video-stats.l.doubleclick.net".to_string(),
+                "r.googlesyndication.com".to_string(),
+            ],
+        },
+    );
+
+    map.insert(
         "gambling".to_string(),
         Preset {
             id: "gambling".to_string(),
