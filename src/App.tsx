@@ -331,6 +331,14 @@ function SchedulePage() {
   );
 }
 
+type UpdateState =
+  | { phase: "idle" }
+  | { phase: "checking" }
+  | { phase: "up_to_date" }
+  | { phase: "installing"; version: string }
+  | { phase: "done"; version: string }
+  | { phase: "error"; msg: string };
+
 // ─── Root App ─────────────────────────────────────────────────────────────────
 export default function App() {
   const [page, setPage] = useState<Page>("dashboard");
@@ -338,6 +346,42 @@ export default function App() {
   const [status, setStatus] = useState<BlockingStatus>({ active: false, activePresets: [], customSiteCount: 0 });
   const [customSites, setCustomSites] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [updateState, setUpdateState] = useState<UpdateState>({ phase: "idle" });
+
+  const checkUpdate = async () => {
+    setUpdateState({ phase: "checking" });
+    try {
+      const result = await invoke<{
+        available: boolean;
+        version?: string;
+        notes?: string;
+        installed?: boolean;
+      }>("check_for_update");
+
+      if (!result.available) {
+        setUpdateState({ phase: "up_to_date" });
+        setTimeout(() => setUpdateState({ phase: "idle" }), 3000);
+      } else if (result.installed) {
+        setUpdateState({ phase: "done", version: result.version! });
+      } else {
+        setUpdateState({ phase: "installing", version: result.version! });
+      }
+    } catch (e) {
+      setUpdateState({ phase: "error", msg: String(e) });
+      setTimeout(() => setUpdateState({ phase: "idle" }), 5000);
+    }
+  };
+
+  const updateLabel = () => {
+    switch (updateState.phase) {
+      case "checking":   return "⏳ Checking…";
+      case "up_to_date": return "✓ Up to date";
+      case "installing": return `⬇️ Installing v${updateState.version}…`;
+      case "done":       return `✅ v${updateState.version} ready — restart to apply`;
+      case "error":      return `⚠️ ${updateState.msg.slice(0, 40)}`;
+      default:           return "⬆️ Check for Updates";
+    }
+  };
 
   const refreshStatus = useCallback(async () => {
     try {
@@ -409,6 +453,45 @@ export default function App() {
         <span className="topbar-logo">RasFocus PC</span>
         <span className="topbar-subtitle">Website Blocker</span>
         <div className="topbar-spacer" />
+
+        {/* Update button */}
+        <button
+          className="btn"
+          onClick={checkUpdate}
+          disabled={updateState.phase === "checking" || updateState.phase === "installing"}
+          style={{
+            fontSize: 12,
+            padding: "6px 12px",
+            background:
+              updateState.phase === "done"
+                ? "var(--success-soft)"
+                : updateState.phase === "error"
+                ? "var(--danger-soft)"
+                : "var(--bg-card)",
+            border: `1.5px solid ${
+              updateState.phase === "done"
+                ? "var(--success)"
+                : updateState.phase === "error"
+                ? "var(--danger)"
+                : "var(--border)"
+            }`,
+            color:
+              updateState.phase === "done"
+                ? "var(--success)"
+                : updateState.phase === "error"
+                ? "var(--danger)"
+                : "var(--text-secondary)",
+            cursor:
+              updateState.phase === "checking" || updateState.phase === "installing"
+                ? "not-allowed"
+                : "pointer",
+            opacity: updateState.phase === "checking" || updateState.phase === "installing" ? 0.7 : 1,
+            transition: "all 0.2s",
+          }}
+        >
+          {updateLabel()}
+        </button>
+
         {error && (
           <div
             style={{
