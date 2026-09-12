@@ -2,7 +2,7 @@ use crate::state::{AppState, ScheduleEntry};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
-use std::io::{BufRead, BufReader, Write};
+use std::io::Write;
 use std::path::PathBuf;
 use std::sync::Mutex;
 use tauri::State;
