@@ -1,0 +1,55 @@
+================================================================
+RasFocus PC Build Error Log
+================================================================
+Run Number  : 26
+Commit SHA  : 5e9208b25b1001271d4efca854b44ff6fbf0865d
+Branch      : main
+Triggered by: raseledutools
+Timestamp   : 2026-09-13_12-16-28
+Runner OS   : Windows
+================================================================
+
+STEP RESULTS:
+- npm_install : success
+- tauri_build : failure
+
+================================================================
+NPM INSTALL LOG:
+================================================================
+
+added 72 packages, and audited 73 packages in 3s
+
+9 packages are looking for funding
+  run `npm fund` for details
+
+2 vulnerabilities (1 moderate, 1 high)
+
+To address all issues (including breaking changes), run:
+  npm audit fix --force
+
+Run `npm audit` for details.
+
+================================================================
+CARGO / RUST BUILD LOG (last 300 lines):
+================================================================
+
+> ras-focus-pc@1.0.0 tauri
+> tauri build --bundles nsis
+
+        Info Looking up installed tauri packages to check mismatched versions...
+     Running beforeBuildCommand `npm run build`
+
+> ras-focus-pc@1.0.0 build
+> tsc && vite build
+
+src/App.tsx(358,10): error TS6133: 'tempToColor' is declared but its value is never read.
+beforeBuildCommand `npm run build` failed with exit code 2
+       Error beforeBuildCommand `npm run build` failed with exit code 2
+
+================================================================
+ENVIRONMENT:
+================================================================
+Node  : v20.20.2
+NPM   : 10.8.2
+Rust  : rustc 1.98.1 (48a229cea 2026-09-01)
+Cargo : cargo 1.98.1 (797e8a9bc 2026-08-05)
