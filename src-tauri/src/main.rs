@@ -70,6 +70,47 @@ fn open_browser_window(url: String) -> Result<(), String> {
     Ok(())
 }
 
+/// Open a URL inside the app itself as an embedded browser window (no Chrome/Edge needed).
+#[tauri::command]
+fn open_in_app_browser(app: tauri::AppHandle, url: String, title: String) -> Result<(), String> {
+    use tauri::{WebviewUrl, WebviewWindowBuilder};
+
+    let safe_url = if url.starts_with("http://") || url.starts_with("https://") {
+        url.clone()
+    } else {
+        format!("https://{}", url)
+    };
+
+    let win_label = format!(
+        "browser_{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .subsec_millis()
+    );
+
+    let display_title = if title.is_empty() {
+        safe_url.clone()
+    } else {
+        title
+    };
+
+    WebviewWindowBuilder::new(
+        &app,
+        &win_label,
+        WebviewUrl::External(safe_url.parse().map_err(|e: url::ParseError| e.to_string())?),
+    )
+    .title(display_title)
+    .inner_size(1280.0, 800.0)
+    .min_inner_size(600.0, 400.0)
+    .resizable(true)
+    .center()
+    .build()
+    .map_err(|e| format!("Failed to open browser window: {}", e))?;
+
+    Ok(())
+}
+
 /// Check GitHub releases for a newer version.
 #[tauri::command]
 async fn check_for_update() -> Result<serde_json::Value, String> {
@@ -212,6 +253,7 @@ fn main() {
             blocker::get_schedule,
             blocker::save_schedule,
             open_browser_window,
+            open_in_app_browser,
             check_for_update,
             download_and_install_update,
             show_window,

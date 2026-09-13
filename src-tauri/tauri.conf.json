@@ -27,6 +27,22 @@
     "trayIcon": {
       "iconPath": "icons/icon.png",
       "iconAsTemplate": false
+    },
+    "security": {
+      "capabilities": [
+        {
+          "identifier": "default",
+          "description": "Default capability",
+          "windows": ["main"],
+          "permissions": [
+            "core:default",
+            "core:webview:allow-create-webview-window",
+            "core:window:allow-create",
+            "shell:allow-open",
+            "dialog:allow-message-dialog"
+          ]
+        }
+      ]
     }
   },
   "bundle": {

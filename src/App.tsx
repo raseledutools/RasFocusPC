@@ -347,20 +347,38 @@ function BrowserPage() {
     { label: "Maps", url: "https://maps.google.com", icon: "🗺️" },
   ];
 
-  const openUrl = async (rawUrl: string) => {
-    let nav = rawUrl.trim();
-    if (!nav) return;
+  // Normalise a raw input into a full URL
+  const normalise = (raw: string) => {
+    let nav = raw.trim();
+    if (!nav) return "";
     if (!nav.startsWith("http://") && !nav.startsWith("https://")) {
       if (!nav.includes(".") || nav.includes(" ")) {
-        nav = `https://www.google.com/search?q=${encodeURIComponent(nav)}`;
-      } else {
-        nav = `https://${nav}`;
+        return `https://www.google.com/search?q=${encodeURIComponent(nav)}`;
       }
+      return `https://${nav}`;
     }
+    return nav;
+  };
+
+  // Derive a readable title from a URL
+  const titleFor = (url: string): string => {
+    try {
+      const u = new URL(url);
+      // e.g. "youtube.com", "google.com"
+      return u.hostname.replace(/^www\./, "");
+    } catch {
+      return url;
+    }
+  };
+
+  // Open URL inside the app — no Chrome / Edge needed
+  const openInApp = async (rawUrl: string) => {
+    const nav = normalise(rawUrl);
+    if (!nav) return;
     setLoading(true);
     setError(null);
     try {
-      await invoke("open_browser_window", { url: nav });
+      await invoke("open_in_app_browser", { url: nav, title: titleFor(nav) });
       setLastOpened(nav);
     } catch (e) {
       setError(String(e));
@@ -369,20 +387,21 @@ function BrowserPage() {
     }
   };
 
-  const handleNavigate = () => openUrl(inputUrl);
+  const handleNavigate = () => openInApp(inputUrl);
 
   return (
     <div>
+      {/* Header */}
       <div style={{ marginBottom: 16 }}>
         <div className="card-title" style={{ fontSize: 16, marginBottom: 4 }}>
-          🌐 Open in Browser
+          🖥️ In-App Browser
         </div>
         <div className="card-desc">
-          Opens in your default browser — ad blocking via hosts file works automatically
+          Opens websites directly inside the app — no Chrome, Edge, or Firefox needed
         </div>
       </div>
 
-      {/* URL Bar */}
+      {/* URL / Search Bar */}
       <div className="card" style={{ marginBottom: 16 }}>
         <div className="site-input-row">
           <input
@@ -390,7 +409,7 @@ function BrowserPage() {
             value={inputUrl}
             onChange={(e) => setInputUrl(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleNavigate()}
-            placeholder="Enter URL or search term…"
+            placeholder="Enter URL or search term… (e.g. youtube.com)"
             style={{ flex: 1 }}
           />
           <button
@@ -431,14 +450,14 @@ function BrowserPage() {
               color: "var(--success)",
             }}
           >
-            ✅ Opened in default browser
+            ✅ Opened inside the app: {titleFor(lastOpened)}
           </div>
         )}
       </div>
 
       {/* Quick Links */}
       <div className="card" style={{ marginBottom: 16 }}>
-        <div className="card-title" style={{ marginBottom: 12, fontSize: 13 }}>Quick Links</div>
+        <div className="card-title" style={{ marginBottom: 12, fontSize: 13 }}>Quick Launch</div>
         <div
           style={{
             display: "grid",
@@ -452,7 +471,7 @@ function BrowserPage() {
               className="btn"
               onClick={() => {
                 setInputUrl(link.url);
-                openUrl(link.url);
+                openInApp(link.url);
               }}
               style={{
                 display: "flex",
@@ -482,9 +501,9 @@ function BrowserPage() {
         <div className="card-title" style={{ marginBottom: 10, fontSize: 13 }}>How it works</div>
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {[
-            ["🚫", "Hosts-level ad blocking", "Enable 'YouTube (Ads-Free)' preset — blocks Google ad servers OS-wide, works in any browser"],
-            ["🌐", "Opens default browser", "Links open in Edge, Chrome, Firefox — whatever is set as default on this PC"],
-            ["⚡", "No extension needed", "Blocking is at the network/OS level, no browser plugin required"],
+            ["🖥️", "Built-in WebView", "Uses Windows WebView2 (built into Windows 10/11) — no browser install required"],
+            ["🚫", "Hosts-level blocking applies", "All your active blocking presets work here too — YouTube Shorts, ads, social media"],
+            ["⚡", "Fully independent", "Each link opens in its own dedicated window inside the app — fully resizable"],
           ].map(([icon, title, desc]) => (
             <div key={title} style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
               <span style={{ fontSize: 18 }}>{icon}</span>
