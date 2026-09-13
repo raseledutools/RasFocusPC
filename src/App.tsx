@@ -355,15 +355,6 @@ const DISPLAY_MODES: DisplayModeConfig[] = [
   { id: "custom",  label: "Custom",  icon: "⚙",  temp: 4000, brightness: 75,  desc: "Your saved settings." },
 ];
 
-function tempToColor(k: number): string {
-  // Map 1000K (warm orange) → 6500K (cool blue-white)
-  const t = (k - 1000) / (6500 - 1000); // 0..1
-  const r = Math.round(255);
-  const g = Math.round(140 + t * 115);
-  const b = Math.round(t * 255);
-  return `rgb(${r},${g},${b})`;
-}
-
 function DisplayPage() {
   const [mode, setMode]           = useState<DisplayMode>("game");
   const [temp, setTemp]           = useState(6000);
