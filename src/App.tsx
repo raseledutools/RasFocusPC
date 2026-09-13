@@ -521,10 +521,13 @@ function DisplayPage() {
   );
 }
 
+// Sites that open inside the app (in-app browser with Chrome UA)
+const IN_APP_SITES = ["youtube.com", "www.youtube.com"];
+
 function BrowserPage() {
   const [inputUrl, setInputUrl] = useState("");
   const [loading, setLoading] = useState(false);
-  const [lastOpened, setLastOpened] = useState<string | null>(null);
+  const [lastOpened, setLastOpened] = useState<{ url: string; inApp: boolean } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const quickLinks = [
@@ -536,7 +539,6 @@ function BrowserPage() {
     { label: "Maps", url: "https://maps.google.com", icon: "🗺️" },
   ];
 
-  // Normalise a raw input into a full URL
   const normalise = (raw: string) => {
     let nav = raw.trim();
     if (!nav) return "";
@@ -549,26 +551,36 @@ function BrowserPage() {
     return nav;
   };
 
-  // Derive a readable title from a URL
   const titleFor = (url: string): string => {
     try {
-      const u = new URL(url);
-      // e.g. "youtube.com", "google.com"
-      return u.hostname.replace(/^www\./, "");
+      return new URL(url).hostname.replace(/^www\./, "");
     } catch {
       return url;
     }
   };
 
-  // Open URL in the system default browser (YouTube, Gmail etc. block embedded WebView)
-  const openInApp = async (rawUrl: string) => {
+  const isInAppUrl = (url: string): boolean => {
+    try {
+      const host = new URL(url).hostname.replace(/^www\./, "");
+      return IN_APP_SITES.some(s => s.replace(/^www\./, "") === host);
+    } catch {
+      return false;
+    }
+  };
+
+  const openUrl = async (rawUrl: string) => {
     const nav = normalise(rawUrl);
     if (!nav) return;
     setLoading(true);
     setError(null);
     try {
-      await invoke("open_browser_window", { url: nav });
-      setLastOpened(nav);
+      const inApp = isInAppUrl(nav);
+      if (inApp) {
+        await invoke("open_in_app_browser", { url: nav, title: titleFor(nav) });
+      } else {
+        await invoke("open_browser_window", { url: nav });
+      }
+      setLastOpened({ url: nav, inApp });
     } catch (e) {
       setError(String(e));
     } finally {
@@ -576,17 +588,17 @@ function BrowserPage() {
     }
   };
 
-  const handleNavigate = () => openInApp(inputUrl);
+  const handleNavigate = () => openUrl(inputUrl);
 
   return (
     <div>
       {/* Header */}
       <div style={{ marginBottom: 16 }}>
         <div className="card-title" style={{ fontSize: 16, marginBottom: 4 }}>
-          🌐 Open in Default Browser
+          🌐 Browser
         </div>
         <div className="card-desc">
-          Opens websites in your default browser — Chrome, Edge, Firefox, or any browser you use
+          YouTube opens inside the app — other sites open in your default browser
         </div>
       </div>
 
@@ -598,7 +610,7 @@ function BrowserPage() {
             value={inputUrl}
             onChange={(e) => setInputUrl(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleNavigate()}
-            placeholder="Enter URL or search term… (e.g. youtube.com)"
+            placeholder="Enter URL or search… (e.g. youtube.com)"
             style={{ flex: 1 }}
           />
           <button
@@ -612,34 +624,22 @@ function BrowserPage() {
         </div>
 
         {error && (
-          <div
-            style={{
-              marginTop: 10,
-              padding: "8px 12px",
-              borderRadius: 6,
-              background: "var(--danger-soft)",
-              border: "1px solid var(--danger)",
-              fontSize: 12,
-              color: "var(--danger)",
-            }}
-          >
+          <div style={{
+            marginTop: 10, padding: "8px 12px", borderRadius: 6,
+            background: "var(--danger-soft)", border: "1px solid var(--danger)",
+            fontSize: 12, color: "var(--danger)",
+          }}>
             ⚠️ {error}
           </div>
         )}
 
         {lastOpened && !error && (
-          <div
-            style={{
-              marginTop: 10,
-              padding: "8px 12px",
-              borderRadius: 6,
-              background: "var(--success-soft)",
-              border: "1px solid var(--success)",
-              fontSize: 12,
-              color: "var(--success)",
-            }}
-          >
-            ✅ Opened in default browser: {titleFor(lastOpened)}
+          <div style={{
+            marginTop: 10, padding: "8px 12px", borderRadius: 6,
+            background: "var(--success-soft)", border: "1px solid var(--success)",
+            fontSize: 12, color: "var(--success)",
+          }}>
+            ✅ {lastOpened.inApp ? "Opened in app" : "Opened in default browser"}: {titleFor(lastOpened.url)}
           </div>
         )}
       </div>
@@ -647,41 +647,31 @@ function BrowserPage() {
       {/* Quick Links */}
       <div className="card" style={{ marginBottom: 16 }}>
         <div className="card-title" style={{ marginBottom: 12, fontSize: 13 }}>Quick Launch</div>
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(3, 1fr)",
-            gap: 10,
-          }}
-        >
-          {quickLinks.map((link) => (
-            <button
-              key={link.url}
-              className="btn"
-              onClick={() => {
-                setInputUrl(link.url);
-                openInApp(link.url);
-              }}
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                gap: 4,
-                padding: "12px 8px",
-                background: "var(--bg-surface)",
-                border: "1px solid var(--border)",
-                borderRadius: 10,
-                cursor: "pointer",
-                fontSize: 12,
-                fontWeight: 500,
-                color: "var(--text-primary)",
-                transition: "all 0.15s",
-              }}
-            >
-              <span style={{ fontSize: 22 }}>{link.icon}</span>
-              {link.label}
-            </button>
-          ))}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
+          {quickLinks.map((link) => {
+            const inApp = isInAppUrl(link.url);
+            return (
+              <button
+                key={link.url}
+                className="btn"
+                onClick={() => { setInputUrl(link.url); openUrl(link.url); }}
+                style={{
+                  display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
+                  padding: "12px 8px",
+                  background: inApp ? "var(--accent-soft, rgba(99,102,241,0.08))" : "var(--bg-surface)",
+                  border: inApp ? "1.5px solid var(--accent)" : "1px solid var(--border)",
+                  borderRadius: 10, cursor: "pointer", fontSize: 12, fontWeight: 500,
+                  color: "var(--text-primary)", transition: "all 0.15s",
+                }}
+              >
+                <span style={{ fontSize: 22 }}>{link.icon}</span>
+                {link.label}
+                {inApp && (
+                  <span style={{ fontSize: 10, color: "var(--accent)", fontWeight: 600 }}>In-App</span>
+                )}
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -690,11 +680,11 @@ function BrowserPage() {
         <div className="card-title" style={{ marginBottom: 10, fontSize: 13 }}>How it works</div>
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {[
-            ["🌐", "Opens default browser", "Links open in Edge, Chrome, Firefox — whatever is set as default on this PC"],
-            ["🚫", "Hosts-level blocking applies", "All your active blocking presets work here too — YouTube Shorts, ads, social media"],
-            ["⚡", "No extension needed", "Blocking works at OS level (hosts file) — no browser extension or WebView needed"],
+            ["▶️", "YouTube opens in-app", "Runs inside RasFocus using WebView2 — no Chrome needed, your blocks still apply"],
+            ["🌐", "Other sites open in your browser", "Google, Gmail, Maps open in Edge/Chrome/Firefox — whatever is your default"],
+            ["🚫", "Blocking always active", "Hosts-level blocks apply everywhere — YouTube Shorts, ads, distracting sites"],
           ].map(([icon, title, desc]) => (
-            <div key={title} style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+            <div key={String(title)} style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
               <span style={{ fontSize: 18 }}>{icon}</span>
               <div>
                 <div style={{ fontSize: 13, fontWeight: 600 }}>{title}</div>
