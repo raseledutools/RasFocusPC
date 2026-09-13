@@ -23,7 +23,7 @@ interface Schedule {
   days: string[];
 }
 
-type Page = "dashboard" | "presets" | "custom" | "schedule" | "browser";
+type Page = "dashboard" | "presets" | "custom" | "schedule" | "browser" | "display";
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -332,6 +332,167 @@ function SchedulePage() {
 }
 
 // ─── Browser Page ─────────────────────────────────────────────────────────────
+// ─── Display Page (CareUEyes-style) ──────────────────────────────────────────
+type DisplayMode = "pause" | "health" | "game" | "movie" | "office" | "editing" | "reading" | "custom";
+
+interface DisplayModeConfig {
+  id: DisplayMode;
+  label: string;
+  icon: string;
+  temp: number;   // 1000–6500K
+  brightness: number; // 10–100%
+  desc: string;
+}
+
+const DISPLAY_MODES: DisplayModeConfig[] = [
+  { id: "pause",   label: "Pause",   icon: "⏸",  temp: 6500, brightness: 100, desc: "Filtering paused — full white balance." },
+  { id: "health",  label: "Health",  icon: "♡",  temp: 3400, brightness: 70,  desc: "Warm tone, reduced brightness for long sessions." },
+  { id: "game",    label: "Game",    icon: "⊞",  temp: 6000, brightness: 90,  desc: "Keeps game visuals clear while reducing screen glare." },
+  { id: "movie",   label: "Movie",   icon: "⊟",  temp: 4500, brightness: 85,  desc: "Cinematic warmth — balanced for dark-room viewing." },
+  { id: "office",  label: "Office",  icon: "⊡",  temp: 5000, brightness: 80,  desc: "Neutral cool tone suited to document work." },
+  { id: "editing", label: "Editing", icon: "✎",  temp: 5500, brightness: 88,  desc: "Near-daylight white for accurate color work." },
+  { id: "reading", label: "Reading", icon: "⊞",  temp: 3000, brightness: 65,  desc: "Soft amber — easiest on eyes for long reading." },
+  { id: "custom",  label: "Custom",  icon: "⚙",  temp: 4000, brightness: 75,  desc: "Your saved settings." },
+];
+
+function tempToColor(k: number): string {
+  // Map 1000K (warm orange) → 6500K (cool blue-white)
+  const t = (k - 1000) / (6500 - 1000); // 0..1
+  const r = Math.round(255);
+  const g = Math.round(140 + t * 115);
+  const b = Math.round(t * 255);
+  return `rgb(${r},${g},${b})`;
+}
+
+function DisplayPage() {
+  const [mode, setMode]           = useState<DisplayMode>("game");
+  const [temp, setTemp]           = useState(6000);
+  const [brightness, setBrightness] = useState(90);
+  const [autoDayNight, setAutoDayNight] = useState(true);
+  const [timeOfDay, setTimeOfDay] = useState<"day" | "night">("night");
+
+  const currentMode = DISPLAY_MODES.find(m => m.id === mode)!;
+
+  const applyMode = (cfg: DisplayModeConfig) => {
+    setMode(cfg.id);
+    if (cfg.id !== "custom") {
+      setTemp(cfg.temp);
+      setBrightness(cfg.brightness);
+    }
+  };
+
+  // Gradient for temperature slider: warm → cool
+  const tempGradient = `linear-gradient(to right,
+    #ff6a00 0%, #ff8c2a 15%, #ffa94d 30%,
+    #ffe0b2 50%, #e8f0ff 70%, #b3caff 85%, #93b4ff 100%)`;
+
+  // Gradient for brightness slider: dark teal → bright teal
+  const brightGradient = `linear-gradient(to right, #0d3d3a 0%, #1a7a70 40%, #2ec4b6 75%, #80e8e0 100%)`;
+
+  const tempPct = ((temp - 1000) / (6500 - 1000)) * 100;
+  const brightPct = ((brightness - 10) / (100 - 10)) * 100;
+
+  return (
+    <div className="display-page">
+
+      {/* ── Sliders card ── */}
+      <div className="display-card">
+
+        {/* Temperature */}
+        <div className="slider-block">
+          <div className="slider-badge" style={{ left: `calc(${tempPct}% - 28px)` }}>
+            {temp}K
+          </div>
+          <div className="slider-track-wrap">
+            <div className="slider-track" style={{ background: tempGradient }} />
+            <input
+              type="range" className="slider-input"
+              min={1000} max={6500} step={100}
+              value={temp}
+              onChange={e => { setTemp(+e.target.value); setMode("custom"); }}
+            />
+          </div>
+          <div className="slider-labels">
+            <span style={{ color: "#ff8c2a" }}>Warm</span>
+            <span style={{ color: "#b3caff" }}>Cool</span>
+          </div>
+        </div>
+
+        <div className="display-divider" />
+
+        {/* Brightness */}
+        <div className="slider-block">
+          <div className="slider-badge" style={{ left: `calc(${brightPct}% - 22px)` }}>
+            {brightness}%
+          </div>
+          <div className="slider-track-wrap">
+            <div className="slider-track" style={{ background: brightGradient }} />
+            <input
+              type="range" className="slider-input"
+              min={10} max={100} step={1}
+              value={brightness}
+              onChange={e => { setBrightness(+e.target.value); setMode("custom"); }}
+            />
+          </div>
+          <div className="slider-labels">
+            <span style={{ color: "#2ec4b6" }}>Dimmer</span>
+            <span style={{ color: "#80e8e0" }}>Brighter</span>
+          </div>
+        </div>
+
+        <div className="display-divider" />
+
+        {/* Auto Day/Night */}
+        <div className="auto-daynight-row">
+          <div>
+            <div className="auto-daynight-label">Auto Day/Night</div>
+            <div className="auto-daynight-sub">Automatically switches based on time.</div>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            {/* Day/Night pill */}
+            <div className="daynight-pill">
+              <button
+                className={`daynight-btn${timeOfDay === "day" ? " dn-inactive" : ""}`}
+                onClick={() => setTimeOfDay("day")}
+              >Day</button>
+              <button
+                className={`daynight-btn${timeOfDay === "night" ? " dn-active" : ""}`}
+                onClick={() => setTimeOfDay("night")}
+              >Night</button>
+            </div>
+            {/* Settings gear */}
+            <button className="dn-gear">⚙</button>
+            {/* Toggle */}
+            <div
+              className={`dn-toggle${autoDayNight ? " dn-on" : ""}`}
+              onClick={() => setAutoDayNight(v => !v)}
+            >
+              <div className="dn-thumb" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Mode grid ── */}
+      <div className="display-mode-grid">
+        {DISPLAY_MODES.map(cfg => (
+          <button
+            key={cfg.id}
+            className={`display-mode-btn${mode === cfg.id ? " dm-active" : ""}`}
+            onClick={() => applyMode(cfg)}
+          >
+            <span className="dm-icon">{cfg.icon}</span>
+            <span className="dm-label">{cfg.label}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* ── Mode description ── */}
+      <div className="display-desc">{currentMode.desc}</div>
+    </div>
+  );
+}
+
 function BrowserPage() {
   const [inputUrl, setInputUrl] = useState("");
   const [loading, setLoading] = useState(false);
@@ -653,10 +814,11 @@ export default function App() {
 
   const navItems: { id: Page; icon: string; label: string }[] = [
     { id: "dashboard", icon: "📊", label: "Dashboard" },
-    { id: "presets", icon: "🛡️", label: "Block Presets" },
-    { id: "custom", icon: "✏️", label: "Custom Sites" },
-    { id: "schedule", icon: "🕐", label: "Schedule" },
-    { id: "browser", icon: "🌐", label: "Browser" },
+    { id: "presets",   icon: "🛡️", label: "Block Presets" },
+    { id: "custom",    icon: "✏️", label: "Custom Sites" },
+    { id: "schedule",  icon: "🕐", label: "Schedule" },
+    { id: "display",   icon: "🖥️", label: "Display" },
+    { id: "browser",   icon: "🌐", label: "Browser" },
   ];
 
   return (
@@ -773,7 +935,8 @@ export default function App() {
           <CustomSitesPage sites={customSites} onAdd={addSite} onRemove={removeSite} />
         )}
         {page === "schedule" && <SchedulePage />}
-        {page === "browser" && <BrowserPage />}
+        {page === "display"  && <DisplayPage />}
+        {page === "browser"  && <BrowserPage />}
       </div>
     </div>
   );
