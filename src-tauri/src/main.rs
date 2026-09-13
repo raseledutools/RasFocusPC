@@ -202,7 +202,7 @@ async fn download_and_install_update(
 
     #[cfg(target_os = "windows")]
     std::process::Command::new("cmd")
-        .args(["/C", "start", "", tmp_path.to_str().unwrap_or("")])
+        .args(["/C", "start", "", tmp_path.to_str().unwrap_or(""), "/S"])
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .spawn()
