@@ -70,7 +70,8 @@ fn open_browser_window(url: String) -> Result<(), String> {
     Ok(())
 }
 
-/// Open a URL inside the app itself as an embedded browser window (no Chrome/Edge needed).
+/// Open a URL inside the app itself as an embedded browser window.
+/// Uses a real Chrome user-agent so YouTube, Google and other sites load normally.
 #[tauri::command]
 fn open_in_app_browser(app: tauri::AppHandle, url: String, title: String) -> Result<(), String> {
     use tauri::{WebviewUrl, WebviewWindowBuilder};
@@ -95,6 +96,12 @@ fn open_in_app_browser(app: tauri::AppHandle, url: String, title: String) -> Res
         title
     };
 
+    // Chrome 124 user-agent — makes YouTube, Google Sign-In, and other
+    // sites treat the WebView2 window as a real browser instead of blocking it.
+    let ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) \
+              AppleWebKit/537.36 (KHTML, like Gecko) \
+              Chrome/124.0.0.0 Safari/537.36";
+
     WebviewWindowBuilder::new(
         &app,
         &win_label,
@@ -105,6 +112,7 @@ fn open_in_app_browser(app: tauri::AppHandle, url: String, title: String) -> Res
     .min_inner_size(600.0, 400.0)
     .resizable(true)
     .center()
+    .user_agent(ua)
     .build()
     .map_err(|e| format!("Failed to open browser window: {}", e))?;
 
