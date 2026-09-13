@@ -38,8 +38,8 @@ jobs:
         id: get_version
         shell: pwsh
         run: |
-          $run  = "${{ github.run_number }}"
-          $ver  = "1.0.$run"
+          $run = "${{ github.run_number }}"
+          $ver = "1.0.$run"
           echo "VERSION=$ver" >> $env:GITHUB_OUTPUT
           echo "New version: $ver"
 
@@ -53,8 +53,8 @@ jobs:
           $conf.version = $ver
           $conf | ConvertTo-Json -Depth 20 | Set-Content src-tauri/tauri.conf.json
 
-          echo "Cargo.toml version:" (Select-String -Path src-tauri/Cargo.toml -Pattern 'version').Line
-          echo "tauri.conf.json version:" $conf.version
+          echo "Patched Cargo.toml:" (Select-String -Path src-tauri/Cargo.toml -Pattern '^version').Line
+          echo "Patched tauri.conf.json version: $ver"
 
       - name: Install frontend dependencies
         id: npm_install
@@ -151,7 +151,7 @@ jobs:
           $sha     = "${{ github.sha }}".Substring(0, 7)
           $runNum  = "${{ github.run_number }}"
 
-          # Find the NSIS exe
+          # Find NSIS exe
           $exeFile = Get-ChildItem "src-tauri/target/release/bundle/nsis" -Filter "*.exe" -ErrorAction SilentlyContinue |
                      Select-Object -First 1
           if (-not $exeFile) {
@@ -161,9 +161,8 @@ jobs:
 
           $destExe = "RasFocusPC-setup.exe"
           Copy-Item $exeFile.FullName -Destination $destExe
-          Write-Host "EXE: $($exeFile.Name) -> $destExe"
 
-          # Delete existing versioned release+tag if any
+          # Delete any existing release for this tag
           $existing = gh release view $tag --repo $repo 2>&1
           if ($LASTEXITCODE -eq 0) {
             gh release delete $tag --repo $repo --yes --cleanup-tag 2>&1
@@ -173,7 +172,7 @@ jobs:
           git tag -f $tag "${{ github.sha }}"
           git push origin "refs/tags/${tag}" --force
 
-          # Create versioned release (marked as latest)
+          # Create new release marked as latest
           gh release create $tag `
             --repo $repo `
             --title "RasFocus PC v${version}" `
@@ -181,26 +180,7 @@ jobs:
             --latest `
             "${destExe}#RasFocusPC-setup.exe"
 
-          Write-Host "Release $tag published."
-
-          # Update floating latest-build tag
-          $latestTag = "latest-build"
-          $existingLatest = gh release view $latestTag --repo $repo 2>&1
-          if ($LASTEXITCODE -eq 0) {
-            gh release delete $latestTag --repo $repo --yes --cleanup-tag 2>&1
-            Start-Sleep -Seconds 2
-          }
-          git push origin ":refs/tags/${latestTag}" 2>&1 | Out-Null
-          git tag -f $latestTag "${{ github.sha }}"
-          git push origin "refs/tags/${latestTag}" --force
-
-          gh release create $latestTag `
-            --repo $repo `
-            --title "RasFocus PC (Latest Build)" `
-            --notes "**Version:** ${version}  |  **Build:** #${runNum}  |  **Commit:** ${sha}`n`nThis release always points to the latest successful build.`n`nDownload ``RasFocusPC-setup.exe`` and run as Administrator.`n`nExisting installations will update automatically on next launch." `
-            "${destExe}#RasFocusPC-setup.exe"
-
-          Write-Host "latest-build release updated."
+          Write-Host "Release $tag published as latest."
 
       - name: Fail if build failed
         if: steps.npm_install.outcome == 'failure' || steps.tauri_build.outcome == 'failure'
