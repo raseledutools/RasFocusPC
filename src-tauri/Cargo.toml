@@ -1,6 +1,6 @@
 [package]
 name = "ras-focus-pc"
-version = "1.0.0"
+version = "1.0.1"
 description = "RasFocus PC - Website & App Blocker"
 authors = ["Rasel"]
 license = "MIT"
