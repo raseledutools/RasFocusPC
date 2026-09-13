@@ -7,8 +7,6 @@ use state::AppState;
 use std::sync::Mutex;
 use tauri::Manager;
 
-/// Check if the current process has admin privileges on Windows.
-/// `net session` exits 0 only when the caller is an Administrator.
 #[cfg(target_os = "windows")]
 fn is_elevated() -> bool {
     std::process::Command::new("net")
@@ -20,7 +18,6 @@ fn is_elevated() -> bool {
         .unwrap_or(false)
 }
 
-/// Re-launch the current executable with UAC elevation via PowerShell, then exit.
 #[cfg(target_os = "windows")]
 fn relaunch_as_admin() {
     let exe = std::env::current_exe().expect("Cannot get exe path");
@@ -39,14 +36,12 @@ fn relaunch_as_admin() {
 /// Open a new browser window pointing at the given URL.
 #[tauri::command]
 fn open_browser_window(app: tauri::AppHandle, url: String) -> Result<(), String> {
-    // Validate URL
     let safe_url = if url.starts_with("http://") || url.starts_with("https://") {
         url.clone()
     } else {
         format!("https://{}", url)
     };
 
-    // Use a unique label based on timestamp to allow multiple windows
     let label = format!("browser_{}", std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
@@ -66,6 +61,64 @@ fn open_browser_window(app: tauri::AppHandle, url: String) -> Result<(), String>
     .map_err(|e| format!("Failed to open browser window: {}", e))?;
 
     Ok(())
+}
+
+/// Check GitHub releases for a newer version.
+/// Returns: { available: bool, version?: string, installed?: bool }
+#[tauri::command]
+async fn check_for_update() -> Result<serde_json::Value, String> {
+    let current_version = env!("CARGO_PKG_VERSION");
+
+    let client = reqwest::Client::builder()
+        .user_agent("RasFocusPC-updater")
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let resp = client
+        .get("https://api.github.com/repos/raseledutools/RasFocusPC/releases/latest")
+        .send()
+        .await
+        .map_err(|e| format!("Network error: {}", e))?;
+
+    if resp.status() == 404 {
+        // No releases yet
+        return Ok(serde_json::json!({ "available": false }));
+    }
+
+    let json: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
+
+    let latest_tag = json["tag_name"]
+        .as_str()
+        .unwrap_or("")
+        .trim_start_matches('v')
+        .to_string();
+
+    if latest_tag.is_empty() {
+        return Ok(serde_json::json!({ "available": false }));
+    }
+
+    if latest_tag == current_version {
+        return Ok(serde_json::json!({ "available": false }));
+    }
+
+    // Find the .exe asset download URL
+    let download_url = json["assets"]
+        .as_array()
+        .and_then(|assets| {
+            assets.iter().find(|a| {
+                a["name"].as_str().map(|n| n.ends_with(".exe")).unwrap_or(false)
+            })
+        })
+        .and_then(|a| a["browser_download_url"].as_str())
+        .unwrap_or("")
+        .to_string();
+
+    Ok(serde_json::json!({
+        "available": true,
+        "version": latest_tag,
+        "download_url": download_url,
+        "installed": false
+    }))
 }
 
 fn main() {
@@ -90,6 +143,7 @@ fn main() {
             blocker::get_schedule,
             blocker::save_schedule,
             open_browser_window,
+            check_for_update,
         ])
         .setup(|app| {
             let main_window = app.get_webview_window("main").unwrap();
