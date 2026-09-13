@@ -34,13 +34,27 @@ jobs:
           cache-on-failure: false
           key: rust-v5
 
-      - name: Read version from Cargo.toml
+      - name: Bump version to 1.0.<run_number>
         id: get_version
         shell: pwsh
         run: |
-          $ver = (Select-String -Path src-tauri/Cargo.toml -Pattern '^version = "(.+)"').Matches[0].Groups[1].Value
+          $run  = "${{ github.run_number }}"
+          $ver  = "1.0.$run"
           echo "VERSION=$ver" >> $env:GITHUB_OUTPUT
-          echo "Version: $ver"
+          echo "New version: $ver"
+
+          # Patch Cargo.toml
+          (Get-Content src-tauri/Cargo.toml) `
+            -replace '^version = ".+"', "version = `"$ver`"" |
+            Set-Content src-tauri/Cargo.toml
+
+          # Patch tauri.conf.json
+          $conf = Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json
+          $conf.version = $ver
+          $conf | ConvertTo-Json -Depth 20 | Set-Content src-tauri/tauri.conf.json
+
+          echo "Cargo.toml version:" (Select-String -Path src-tauri/Cargo.toml -Pattern 'version').Line
+          echo "tauri.conf.json version:" $conf.version
 
       - name: Install frontend dependencies
         id: npm_install
@@ -125,7 +139,7 @@ jobs:
           git commit -m "ci: error log run #${{ github.run_number }} [skip ci]"
           git push origin HEAD:${{ github.ref_name }}
 
-      - name: Publish / update GitHub Release
+      - name: Publish GitHub Release
         if: steps.tauri_build.outcome == 'success'
         shell: pwsh
         env:
@@ -137,7 +151,7 @@ jobs:
           $sha     = "${{ github.sha }}".Substring(0, 7)
           $runNum  = "${{ github.run_number }}"
 
-          # Find the single NSIS exe
+          # Find the NSIS exe
           $exeFile = Get-ChildItem "src-tauri/target/release/bundle/nsis" -Filter "*.exe" -ErrorAction SilentlyContinue |
                      Select-Object -First 1
           if (-not $exeFile) {
@@ -145,27 +159,21 @@ jobs:
             exit 1
           }
 
-          # Rename to fixed predictable filename
           $destExe = "RasFocusPC-setup.exe"
           Copy-Item $exeFile.FullName -Destination $destExe
           Write-Host "EXE: $($exeFile.Name) -> $destExe"
 
-          # --- versioned release: delete old release + tag, recreate ---
+          # Delete existing versioned release+tag if any
           $existing = gh release view $tag --repo $repo 2>&1
           if ($LASTEXITCODE -eq 0) {
-            Write-Host "Deleting existing release $tag ..."
             gh release delete $tag --repo $repo --yes --cleanup-tag 2>&1
             Start-Sleep -Seconds 3
           }
-
-          # Force-delete the tag from remote in case cleanup-tag missed it
           git push origin ":refs/tags/${tag}" 2>&1 | Out-Null
-
-          # Re-create the tag pointing at current commit, then push
           git tag -f $tag "${{ github.sha }}"
           git push origin "refs/tags/${tag}" --force
 
-          # Create versioned release
+          # Create versioned release (marked as latest)
           gh release create $tag `
             --repo $repo `
             --title "RasFocus PC v${version}" `
@@ -175,7 +183,7 @@ jobs:
 
           Write-Host "Release $tag published."
 
-          # --- also update the floating 'latest-build' tag ---
+          # Update floating latest-build tag
           $latestTag = "latest-build"
           $existingLatest = gh release view $latestTag --repo $repo 2>&1
           if ($LASTEXITCODE -eq 0) {
