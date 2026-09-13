@@ -1,0 +1,67 @@
+================================================================
+RasFocus PC Build Error Log
+================================================================
+Run Number  : 22
+Commit SHA  : 48676aaea3662e3f4b89754cdb6a819bb4f238ee
+Branch      : main
+Triggered by: raseledutools
+Timestamp   : 2026-09-13_11-31-00
+Runner OS   : Windows
+================================================================
+
+STEP RESULTS:
+- npm_install : success
+- tauri_build : failure
+
+================================================================
+NPM INSTALL LOG:
+================================================================
+
+added 72 packages, and audited 73 packages in 4s
+
+9 packages are looking for funding
+  run `npm fund` for details
+
+2 vulnerabilities (1 moderate, 1 high)
+
+To address all issues (including breaking changes), run:
+  npm audit fix --force
+
+Run `npm audit` for details.
+
+================================================================
+CARGO / RUST BUILD LOG (last 300 lines):
+================================================================
+
+> ras-focus-pc@1.0.0 tauri
+> tauri build --bundles nsis
+
+        Info Looking up installed tauri packages to check mismatched versions...
+     Running beforeBuildCommand `npm run build`
+
+> ras-focus-pc@1.0.0 build
+> tsc && vite build
+
+[36mvite v5.4.21 [32mbuilding for production...[36m[39m
+transforming...
+[32m✓[39m 33 modules transformed.
+rendering chunks...
+computing gzip size...
+[2mdist/[22m[32mindex.html                 [39m[1m[2m  0.47 kB[22m[1m[22m[2m │ gzip:  0.30 kB[22m
+[2mdist/[22m[35massets/index-nWTw614z.css  [39m[1m[2m  7.07 kB[22m[1m[22m[2m │ gzip:  1.92 kB[22m
+[2mdist/[22m[36massets/index-Bc3lzGLu.js   [39m[1m[2m157.49 kB[22m[1m[22m[2m │ gzip: 50.04 kB[22m
+[32m✓ built in 1.06s[39m
+    Updating crates.io index
+error: no matching package named `tauri-plugin-tray` found
+location searched: crates.io index
+required by package `ras-focus-pc v1.0.0 (D:\a\RasFocusPC\RasFocusPC\src-tauri)`
+failed to build app: failed to build app
+       Error failed to build app: failed to build app
+
+================================================================
+ENVIRONMENT:
+================================================================
+Node  : v20.20.2
+NPM   : 10.8.2
+Rust  : rustc 1.98.1 (48a229cea 2026-09-01)
+Cargo : cargo 1.98.1 (797e8a9bc 2026-08-05)
