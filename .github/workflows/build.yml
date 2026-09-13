@@ -150,7 +150,7 @@ jobs:
           Copy-Item $exeFile.FullName -Destination $destExe
           Write-Host "EXE: $($exeFile.Name) -> $destExe"
 
-          # Delete existing release for this tag if any
+          # --- versioned release: delete old release + tag, recreate ---
           $existing = gh release view $tag --repo $repo 2>&1
           if ($LASTEXITCODE -eq 0) {
             Write-Host "Deleting existing release $tag ..."
@@ -158,15 +158,41 @@ jobs:
             Start-Sleep -Seconds 3
           }
 
-          # Create release tagged with version
+          # Force-delete the tag from remote in case cleanup-tag missed it
+          git push origin ":refs/tags/${tag}" 2>&1 | Out-Null
+
+          # Re-create the tag pointing at current commit, then push
+          git tag -f $tag "${{ github.sha }}"
+          git push origin "refs/tags/${tag}" --force
+
+          # Create versioned release
           gh release create $tag `
             --repo $repo `
             --title "RasFocus PC v${version}" `
-            --notes "**Version:** ${version}  |  **Build:** #${runNum}  |  **Commit:** ${sha}\`n\`nDownload \`\`RasFocusPC-setup.exe\`\` and run as Administrator.\`n\`nExisting installations will update automatically on next launch." `
+            --notes "**Version:** ${version}  |  **Build:** #${runNum}  |  **Commit:** ${sha}`n`nDownload ``RasFocusPC-setup.exe`` and run as Administrator.`n`nExisting installations will update automatically on next launch." `
             --latest `
             "${destExe}#RasFocusPC-setup.exe"
 
           Write-Host "Release $tag published."
+
+          # --- also update the floating 'latest-build' tag ---
+          $latestTag = "latest-build"
+          $existingLatest = gh release view $latestTag --repo $repo 2>&1
+          if ($LASTEXITCODE -eq 0) {
+            gh release delete $latestTag --repo $repo --yes --cleanup-tag 2>&1
+            Start-Sleep -Seconds 2
+          }
+          git push origin ":refs/tags/${latestTag}" 2>&1 | Out-Null
+          git tag -f $latestTag "${{ github.sha }}"
+          git push origin "refs/tags/${latestTag}" --force
+
+          gh release create $latestTag `
+            --repo $repo `
+            --title "RasFocus PC (Latest Build)" `
+            --notes "**Version:** ${version}  |  **Build:** #${runNum}  |  **Commit:** ${sha}`n`nThis release always points to the latest successful build.`n`nDownload ``RasFocusPC-setup.exe`` and run as Administrator.`n`nExisting installations will update automatically on next launch." `
+            "${destExe}#RasFocusPC-setup.exe"
+
+          Write-Host "latest-build release updated."
 
       - name: Fail if build failed
         if: steps.npm_install.outcome == 'failure' || steps.tauri_build.outcome == 'failure'
