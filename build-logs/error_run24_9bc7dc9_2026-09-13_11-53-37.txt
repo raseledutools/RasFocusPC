@@ -1,0 +1,137 @@
+================================================================
+RasFocus PC Build Error Log
+================================================================
+Run Number  : 24
+Commit SHA  : 9bc7dc9edd1d067ee07fd4467ef8dfab1d6b5bd7
+Branch      : main
+Triggered by: raseledutools
+Timestamp   : 2026-09-13_11-53-37
+Runner OS   : Windows
+================================================================
+
+STEP RESULTS:
+- npm_install : success
+- tauri_build : failure
+
+================================================================
+NPM INSTALL LOG:
+================================================================
+
+added 72 packages, and audited 73 packages in 3s
+
+9 packages are looking for funding
+  run `npm fund` for details
+
+2 vulnerabilities (1 moderate, 1 high)
+
+To address all issues (including breaking changes), run:
+  npm audit fix --force
+
+Run `npm audit` for details.
+
+================================================================
+CARGO / RUST BUILD LOG (last 300 lines):
+================================================================
+
+> ras-focus-pc@1.0.0 tauri
+> tauri build --bundles nsis
+
+        Info Looking up installed tauri packages to check mismatched versions...
+     Running beforeBuildCommand `npm run build`
+
+> ras-focus-pc@1.0.0 build
+> tsc && vite build
+
+[36mvite v5.4.21 [32mbuilding for production...[36m[39m
+transforming...
+[32m✓[39m 33 modules transformed.
+rendering chunks...
+computing gzip size...
+[2mdist/[22m[32mindex.html                 [39m[1m[2m  0.47 kB[22m[1m[22m[2m │ gzip:  0.30 kB[22m
+[2mdist/[22m[35massets/index-nWTw614z.css  [39m[1m[2m  7.07 kB[22m[1m[22m[2m │ gzip:  1.92 kB[22m
+[2mdist/[22m[36massets/index-B1c0e7ur.js   [39m[1m[2m157.63 kB[22m[1m[22m[2m │ gzip: 50.16 kB[22m
+[32m✓ built in 829ms[39m
+    Updating crates.io index
+     Locking 498 packages to latest compatible versions
+      Adding generic-array v0.14.7 (available: v0.14.9)
+      Adding reqwest v0.12.28 (available: v0.13.5)
+      Adding toml v0.8.2 (available: v0.8.23)
+      Adding toml_datetime v0.6.3 (available: v0.6.11)
+      Adding toml_edit v0.20.2 (available: v0.20.7)
+ Downloading crates ...
+  Downloaded data-url v0.3.2
+   Compiling stable_deref_trait v1.2.1
+   Compiling phf_shared v0.13.1
+   Compiling new_debug_unreachable v1.0.6
+   Compiling precomputed-hash v0.1.1
+   Compiling yoke v0.8.3
+   Compiling web_atoms v0.2.6
+   Compiling dtoa v1.0.11
+   Compiling tendril v0.5.1
+   Compiling zerovec v0.11.8
+   Compiling zerotrie v0.2.5
+   Compiling tinystr v0.8.4
+   Compiling potential_utf v0.1.6
+   Compiling phf v0.13.1
+   Compiling string_cache v0.9.0
+   Compiling icu_collections v2.3.0
+   Compiling icu_locale_core v2.3.0
+   Compiling dtoa-short v0.3.5
+   Compiling cssparser v0.36.0
+   Compiling tauri v2.11.5
+   Compiling icu_provider v2.3.1
+   Compiling icu_properties v2.3.0
+   Compiling icu_normalizer v2.3.0
+   Compiling idna_adapter v1.2.2
+   Compiling idna v1.1.0
+   Compiling markup5ever v0.38.0
+   Compiling servo_arc v0.4.3
+   Compiling url v2.5.8
+   Compiling selectors v0.36.1
+   Compiling derive_more v2.1.1
+   Compiling rustc-hash v2.1.3
+   Compiling bit-vec v0.8.0
+   Compiling bit-set v0.8.0
+   Compiling html5ever v0.38.0
+   Compiling foldhash v0.2.0
+   Compiling urlpattern v0.3.0
+   Compiling dom_query v0.27.0
+   Compiling tao v0.35.3
+   Compiling tauri-plugin-fs v2.5.2
+   Compiling data-url v0.3.2
+   Compiling tauri-utils v2.9.3
+   Compiling tauri-plugin-shell v2.3.6
+   Compiling tauri-plugin-dialog v2.7.3
+   Compiling tower-http v0.6.11
+   Compiling ras-focus-pc v1.0.0 (D:\a\RasFocusPC\RasFocusPC\src-tauri)
+   Compiling reqwest v0.12.28
+   Compiling tauri-runtime v2.11.3
+   Compiling tauri-runtime-wry v2.11.4
+error: proc macro panicked
+   --> src\main.rs:312:14
+    |
+312 |         .run(tauri::generate_context!())
+    |              ^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: message: failed to resolve ACL: UnknownPermission { key: "dialog", permission: "allow-message-dialog" }
+
+warning: use of deprecated method `tauri::tray::TrayIconBuilder::<R>::menu_on_left_click`: Use `TrayIconBuilder::show_menu_on_left_click` instead.
+   --> src\main.rs:272:18
+    |
+272 |                 .menu_on_left_click(false)
+    |                  ^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(deprecated)]` on by default
+
+warning: `ras-focus-pc` (bin "ras-focus-pc") generated 1 warning
+error: could not compile `ras-focus-pc` (bin "ras-focus-pc") due to 1 previous error; 1 warning emitted
+failed to build app: failed to build app
+       Error failed to build app: failed to build app
+
+================================================================
+ENVIRONMENT:
+================================================================
+Node  : v20.20.2
+NPM   : 10.8.2
+Rust  : rustc 1.98.1 (48a229cea 2026-09-01)
+Cargo : cargo 1.98.1 (797e8a9bc 2026-08-05)
