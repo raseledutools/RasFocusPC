@@ -1,12 +1,9 @@
-name: Build RasFocus PC
+name: Build & Release RasFocus PC
 
 on:
   push:
-    branches: [main, master]
-    tags:
-      - 'v*'
-  pull_request:
-    branches: [main, master]
+    branches: [main]
+  workflow_dispatch:
 
 jobs:
   build-windows:
@@ -35,7 +32,7 @@ jobs:
         with:
           workspaces: './src-tauri -> target'
           cache-on-failure: false
-          key: rust-v3
+          key: rust-v4
 
       - name: Install frontend dependencies
         id: npm_install
@@ -43,10 +40,10 @@ jobs:
         run: npm install 2>&1 | Tee-Object -FilePath npm-install.log
         continue-on-error: true
 
-      - name: Build Tauri app
+      - name: Build Tauri app (NSIS only)
         id: tauri_build
         shell: pwsh
-        run: npm run tauri build 2>&1 | Tee-Object -FilePath tauri-build.log
+        run: npm run tauri build -- --bundles nsis 2>&1 | Tee-Object -FilePath tauri-build.log
         continue-on-error: true
 
       - name: Collect and upload error log
@@ -120,58 +117,48 @@ jobs:
           git commit -m "ci: error log run #${{ github.run_number }} [skip ci]"
           git push origin HEAD:${{ github.ref_name }}
 
-      - name: Upload installer as artifact
+      - name: Publish / update GitHub Release
         if: steps.tauri_build.outcome == 'success'
-        uses: actions/upload-artifact@v4
-        with:
-          name: RasFocusPC-installer
-          path: |
-            src-tauri/target/release/bundle/nsis/*.exe
-            src-tauri/target/release/bundle/msi/*.msi
-          if-no-files-found: warn
-
-      - name: Publish GitHub Release
-        if: steps.tauri_build.outcome == 'success' && startsWith(github.ref, 'refs/tags/')
         shell: pwsh
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          $tag     = "${{ github.ref_name }}"
-          $version = $tag.TrimStart('v')
           $repo    = "${{ github.repository }}"
-          $baseUrl = "https://github.com/${repo}/releases/download/${tag}"
+          $tag     = "latest-build"
+          $sha     = "${{ github.sha }}".Substring(0, 7)
+          $runNum  = "${{ github.run_number }}"
 
-          $exeFile = Get-ChildItem "src-tauri/target/release/bundle/nsis" -Filter "*.exe" |
+          # Find the single NSIS exe
+          $exeFile = Get-ChildItem "src-tauri/target/release/bundle/nsis" -Filter "*.exe" -ErrorAction SilentlyContinue |
                      Select-Object -First 1
-          if (-not $exeFile) { Write-Error "No NSIS installer found"; exit 1 }
+          if (-not $exeFile) {
+            Write-Error "No NSIS .exe found in bundle/nsis"
+            exit 1
+          }
 
-          $hash        = (Get-FileHash $exeFile.FullName -Algorithm SHA256).Hash.ToLower()
-          $downloadUrl = "${baseUrl}/$($exeFile.Name)"
+          # Rename to a fixed, predictable filename
+          $destExe = "RasFocusPC-setup.exe"
+          Copy-Item $exeFile.FullName -Destination $destExe
 
-          $manifest = @{
-            version   = $version
-            notes     = "See https://github.com/${repo}/releases/tag/${tag} for details."
-            pub_date  = (Get-Date -Format "yyyy-MM-ddTHH:mm:ssZ")
-            platforms = @{
-              "windows-x86_64" = @{
-                url       = $downloadUrl
-                signature = ""
-                sha256    = $hash
-              }
-            }
-          } | ConvertTo-Json -Depth 5
+          Write-Host "Found exe: $($exeFile.Name) -> $destExe"
 
-          $manifest | Set-Content -Path "updater.json" -Encoding utf8
+          # Delete old 'latest-build' release if it exists (so we can recreate)
+          $existingRelease = gh release view $tag --repo $repo 2>&1
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "Deleting old '$tag' release..."
+            gh release delete $tag --repo $repo --yes --cleanup-tag 2>&1
+            Start-Sleep -Seconds 3
+          }
 
+          # Create fresh release with the single exe
           gh release create $tag `
-            --title "RasFocus PC $tag" `
-            --notes "Download the .exe below and run as Administrator." `
+            --repo $repo `
+            --title "RasFocus PC (Latest Build)" `
+            --notes "**Build:** #${runNum}  |  **Commit:** ${sha}`n`nDownload ``RasFocusPC-setup.exe`` and run as Administrator.`n`nThis release is automatically updated on every push to main." `
             --latest `
-            "$($exeFile.FullName)#RasFocusPC-${version}-setup.exe" `
-            "updater.json#updater.json" 2>&1 || `
-          gh release upload $tag `
-            "$($exeFile.FullName)#RasFocusPC-${version}-setup.exe" `
-            "updater.json#updater.json" --clobber
+            "${destExe}#RasFocusPC-setup.exe"
+
+          Write-Host "Release '$tag' published with $destExe"
 
       - name: Fail if build failed
         if: steps.npm_install.outcome == 'failure' || steps.tauri_build.outcome == 'failure'
