@@ -36,6 +36,38 @@ fn relaunch_as_admin() {
     std::process::exit(0);
 }
 
+/// Open a new browser window pointing at the given URL.
+#[tauri::command]
+fn open_browser_window(app: tauri::AppHandle, url: String) -> Result<(), String> {
+    // Validate URL
+    let safe_url = if url.starts_with("http://") || url.starts_with("https://") {
+        url.clone()
+    } else {
+        format!("https://{}", url)
+    };
+
+    // Use a unique label based on timestamp to allow multiple windows
+    let label = format!("browser_{}", std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis());
+
+    tauri::WebviewWindowBuilder::new(
+        &app,
+        &label,
+        tauri::WebviewUrl::External(safe_url.parse().map_err(|e| format!("Invalid URL: {}", e))?),
+    )
+    .title("RasFocus Browser")
+    .inner_size(1200.0, 800.0)
+    .min_inner_size(800.0, 600.0)
+    .resizable(true)
+    .center()
+    .build()
+    .map_err(|e| format!("Failed to open browser window: {}", e))?;
+
+    Ok(())
+}
+
 fn main() {
     #[cfg(target_os = "windows")]
     if !is_elevated() {
@@ -57,6 +89,7 @@ fn main() {
             blocker::get_presets,
             blocker::get_schedule,
             blocker::save_schedule,
+            open_browser_window,
         ])
         .setup(|app| {
             let main_window = app.get_webview_window("main").unwrap();
