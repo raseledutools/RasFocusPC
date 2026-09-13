@@ -71,7 +71,6 @@ fn open_browser_window(url: String) -> Result<(), String> {
 }
 
 /// Check GitHub releases for a newer version.
-/// Returns { available, version?, download_url? }
 #[tauri::command]
 async fn check_for_update() -> Result<serde_json::Value, String> {
     let current_version = env!("CARGO_PKG_VERSION");
@@ -124,8 +123,7 @@ async fn check_for_update() -> Result<serde_json::Value, String> {
     }))
 }
 
-/// Download the new installer to %TEMP% and run it, then quit this app.
-/// The installer (NSIS) will replace the running app automatically.
+/// Download installer to %TEMP% and launch it, then quit.
 #[tauri::command]
 async fn download_and_install_update(
     download_url: String,
@@ -148,7 +146,6 @@ async fn download_and_install_update(
         return Err(format!("Download error: HTTP {}", resp.status()));
     }
 
-    // Save to %TEMP%\RasFocusPC-update.exe
     let tmp_path = std::env::temp_dir().join("RasFocusPC-update.exe");
     let bytes = resp
         .bytes()
@@ -156,37 +153,27 @@ async fn download_and_install_update(
         .map_err(|e| format!("Read failed: {}", e))?;
 
     {
-        let mut file =
-            std::fs::File::create(&tmp_path).map_err(|e| format!("Cannot create file: {}", e))?;
+        let mut file = std::fs::File::create(&tmp_path)
+            .map_err(|e| format!("Cannot create file: {}", e))?;
         file.write_all(&bytes)
             .map_err(|e| format!("Write failed: {}", e))?;
     }
 
-    // Launch installer silently (NSIS /S flag) then exit
-    // The installer will close the running app via the uninstaller and replace it
     #[cfg(target_os = "windows")]
-    {
-        std::process::Command::new("cmd")
-            .args([
-                "/C",
-                "start",
-                "",
-                tmp_path.to_str().unwrap_or(""),
-            ])
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .spawn()
-            .map_err(|e| format!("Cannot launch installer: {}", e))?;
-    }
+    std::process::Command::new("cmd")
+        .args(["/C", "start", "", tmp_path.to_str().unwrap_or("")])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .map_err(|e| format!("Cannot launch installer: {}", e))?;
 
-    // Give installer a moment to start, then quit
     tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
     app.exit(0);
 
     Ok(())
 }
 
-/// Show the main window (called from tray menu or frontend).
+/// Show the main window.
 #[tauri::command]
 fn show_window(app: tauri::AppHandle) {
     if let Some(win) = app.get_webview_window("main") {
@@ -195,7 +182,7 @@ fn show_window(app: tauri::AppHandle) {
     }
 }
 
-/// Quit the app completely (called from tray menu or frontend).
+/// Quit the app completely.
 #[tauri::command]
 fn quit_app(app: tauri::AppHandle) {
     app.exit(0);
@@ -213,7 +200,6 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_tray::init())
         .manage(Mutex::new(AppState::default()))
         .invoke_handler(tauri::generate_handler![
             blocker::get_blocked_sites,
@@ -232,28 +218,27 @@ fn main() {
             quit_app,
         ])
         .setup(|app| {
-            // ── Tray icon & menu ──────────────────────────────────────────
-            let show_item = MenuItem::with_id(app, "show", "Show RasFocus PC", true, None::<&str>)?;
-            let quit_item = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&show_item, &quit_item])?;
+            // ── Tray menu ────────────────────────────────────────────────
+            let show_i = MenuItem::with_id(app, "show", "Show RasFocus PC", true, None::<&str>)?;
+            let quit_i = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+            let menu   = Menu::with_items(app, &[&show_i, &quit_i])?;
 
             let _tray = TrayIconBuilder::new()
                 .icon(app.default_window_icon().unwrap().clone())
                 .tooltip("RasFocus PC")
                 .menu(&menu)
-                .menu_on_left_click(false)   // left-click = show window
+                .menu_on_left_click(false)
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "show" => {
-                        if let Some(win) = app.get_webview_window("main") {
-                            let _ = win.show();
-                            let _ = win.set_focus();
+                        if let Some(w) = app.get_webview_window("main") {
+                            let _ = w.show();
+                            let _ = w.set_focus();
                         }
                     }
                     "quit" => app.exit(0),
                     _ => {}
                 })
                 .on_tray_icon_event(|tray, event| {
-                    // Left-click on tray icon → show window
                     if let TrayIconEvent::Click {
                         button: MouseButton::Left,
                         button_state: MouseButtonState::Up,
@@ -261,31 +246,21 @@ fn main() {
                     } = event
                     {
                         let app = tray.app_handle();
-                        if let Some(win) = app.get_webview_window("main") {
-                            let _ = win.show();
-                            let _ = win.set_focus();
+                        if let Some(w) = app.get_webview_window("main") {
+                            let _ = w.show();
+                            let _ = w.set_focus();
                         }
                     }
                 })
                 .build(app)?;
 
-            // ── Hide to tray on close (don't destroy window) ──────────────
+            // ── Hide to tray on window close ─────────────────────────────
             let win = app.get_webview_window("main").unwrap();
-            win.on_window_event(|event| {
+            let win_hide = win.clone();
+            win.on_window_event(move |event| {
                 if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                     api.prevent_close();
-                    // The window handle is not directly accessible here via closure
-                    // We handle hide via the prevent_close; the window just hides.
-                    // We call hide via a separate listener below.
-                }
-            });
-
-            // Separate listener that actually hides the window
-            let win2 = app.get_webview_window("main").unwrap();
-            let win2_clone = win2.clone();
-            win2.on_window_event(move |event| {
-                if let tauri::WindowEvent::CloseRequested { .. } = event {
-                    let _ = win2_clone.hide();
+                    let _ = win_hide.hide();
                 }
             });
 
