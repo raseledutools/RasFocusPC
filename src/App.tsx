@@ -361,8 +361,26 @@ function DisplayPage() {
   const [brightness, setBrightness] = useState(90);
   const [autoDayNight, setAutoDayNight] = useState(true);
   const [timeOfDay, setTimeOfDay] = useState<"day" | "night">("night");
+  const [filterStatus, setFilterStatus] = useState<"idle" | "applying" | "ok" | "err">("idle");
 
   const currentMode = DISPLAY_MODES.find(m => m.id === mode)!;
+
+  // Apply display filter to screen whenever temp or brightness changes (debounced 700ms)
+  useEffect(() => {
+    setFilterStatus("applying");
+    const timer = setTimeout(() => {
+      invoke("apply_display_filter", { tempK: temp, brightness })
+        .then(() => {
+          setFilterStatus("ok");
+          setTimeout(() => setFilterStatus("idle"), 2000);
+        })
+        .catch(() => {
+          setFilterStatus("err");
+          setTimeout(() => setFilterStatus("idle"), 3000);
+        });
+    }, 700);
+    return () => clearTimeout(timer);
+  }, [temp, brightness]);
 
   const applyMode = (cfg: DisplayModeConfig) => {
     setMode(cfg.id);
@@ -480,6 +498,25 @@ function DisplayPage() {
 
       {/* ── Mode description ── */}
       <div className="display-desc">{currentMode.desc}</div>
+
+      {/* ── Filter apply status ── */}
+      {filterStatus !== "idle" && (
+        <div style={{
+          marginTop: 10,
+          padding: "6px 14px",
+          borderRadius: 8,
+          fontSize: 12,
+          fontWeight: 500,
+          textAlign: "center",
+          background: filterStatus === "ok" ? "var(--success-soft)" : filterStatus === "err" ? "var(--danger-soft)" : "var(--bg-surface)",
+          color: filterStatus === "ok" ? "var(--success)" : filterStatus === "err" ? "var(--danger)" : "var(--text-secondary)",
+          border: `1px solid ${filterStatus === "ok" ? "var(--success)" : filterStatus === "err" ? "var(--danger)" : "var(--border)"}`,
+        }}>
+          {filterStatus === "applying" && "⏳ Applying filter…"}
+          {filterStatus === "ok"       && "✅ Display filter applied"}
+          {filterStatus === "err"      && "⚠️ Could not apply filter (GPU restriction?)"}
+        </div>
+      )}
     </div>
   );
 }
@@ -523,14 +560,14 @@ function BrowserPage() {
     }
   };
 
-  // Open URL inside the app — no Chrome / Edge needed
+  // Open URL in the system default browser (YouTube, Gmail etc. block embedded WebView)
   const openInApp = async (rawUrl: string) => {
     const nav = normalise(rawUrl);
     if (!nav) return;
     setLoading(true);
     setError(null);
     try {
-      await invoke("open_in_app_browser", { url: nav, title: titleFor(nav) });
+      await invoke("open_browser_window", { url: nav });
       setLastOpened(nav);
     } catch (e) {
       setError(String(e));
@@ -546,10 +583,10 @@ function BrowserPage() {
       {/* Header */}
       <div style={{ marginBottom: 16 }}>
         <div className="card-title" style={{ fontSize: 16, marginBottom: 4 }}>
-          🖥️ In-App Browser
+          🌐 Open in Default Browser
         </div>
         <div className="card-desc">
-          Opens websites directly inside the app — no Chrome, Edge, or Firefox needed
+          Opens websites in your default browser — Chrome, Edge, Firefox, or any browser you use
         </div>
       </div>
 
@@ -602,7 +639,7 @@ function BrowserPage() {
               color: "var(--success)",
             }}
           >
-            ✅ Opened inside the app: {titleFor(lastOpened)}
+            ✅ Opened in default browser: {titleFor(lastOpened)}
           </div>
         )}
       </div>
@@ -653,9 +690,9 @@ function BrowserPage() {
         <div className="card-title" style={{ marginBottom: 10, fontSize: 13 }}>How it works</div>
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {[
-            ["🖥️", "Built-in WebView", "Uses Windows WebView2 (built into Windows 10/11) — no browser install required"],
+            ["🌐", "Opens default browser", "Links open in Edge, Chrome, Firefox — whatever is set as default on this PC"],
             ["🚫", "Hosts-level blocking applies", "All your active blocking presets work here too — YouTube Shorts, ads, social media"],
-            ["⚡", "Fully independent", "Each link opens in its own dedicated window inside the app — fully resizable"],
+            ["⚡", "No extension needed", "Blocking works at OS level (hosts file) — no browser extension or WebView needed"],
           ].map(([icon, title, desc]) => (
             <div key={title} style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
               <span style={{ fontSize: 18 }}>{icon}</span>

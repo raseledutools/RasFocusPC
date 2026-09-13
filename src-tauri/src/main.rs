@@ -111,6 +111,92 @@ fn open_in_app_browser(app: tauri::AppHandle, url: String, title: String) -> Res
     Ok(())
 }
 
+/// Convert colour temperature in Kelvin to (red, green, blue) multipliers 0.0–1.0.
+/// Based on Tanner Helland's algorithm.
+fn kelvin_to_rgb(k: i32) -> (f64, f64, f64) {
+    if k >= 6500 {
+        return (1.0, 1.0, 1.0); // reset / Pause mode
+    }
+    let t = k as f64 / 100.0;
+
+    let r = if t <= 66.0 {
+        1.0
+    } else {
+        (329.698727446 * (t - 60.0).powf(-0.1332047592) / 255.0).clamp(0.0, 1.0)
+    };
+
+    let g = if t <= 66.0 {
+        (99.4708025861 * t.ln() - 161.1195681661) / 255.0
+    } else {
+        288.1221695283 * (t - 60.0).powf(-0.0755148492) / 255.0
+    };
+    let g = g.clamp(0.0, 1.0);
+
+    let b = if t >= 66.0 {
+        1.0
+    } else if t <= 19.0 {
+        0.0
+    } else {
+        ((138.5177312231 * (t - 10.0).ln() - 305.0447927307) / 255.0).clamp(0.0, 1.0)
+    };
+
+    (r, g, b)
+}
+
+/// Apply colour-temperature + brightness filter via SetDeviceGammaRamp (PowerShell P/Invoke).
+/// temp_k : 1000–6500 K   brightness : 10–100
+#[tauri::command]
+fn apply_display_filter(temp_k: i32, brightness: i32) -> Result<(), String> {
+    let (rm, gm, bm) = kelvin_to_rgb(temp_k);
+    let brt = (brightness as f64 / 100.0).clamp(0.1, 1.0);
+
+    // Build a single-line PowerShell command that P/Invokes SetDeviceGammaRamp.
+    // Double-braces {{ }} in the Rust format string produce literal { } in the output.
+    let script = format!(
+        r#"Add-Type -TypeDefinition @'
+using System;using System.Runtime.InteropServices;
+public class Gdi32{{
+[DllImport("gdi32.dll")]public static extern bool SetDeviceGammaRamp(IntPtr h,ref RAMP r);
+[DllImport("user32.dll")]public static extern IntPtr GetDC(IntPtr h);
+[StructLayout(LayoutKind.Sequential)]
+public struct RAMP{{
+[MarshalAs(UnmanagedType.ByValArray,SizeConst=256)]public ushort[] Red;
+[MarshalAs(UnmanagedType.ByValArray,SizeConst=256)]public ushort[] Green;
+[MarshalAs(UnmanagedType.ByValArray,SizeConst=256)]public ushort[] Blue;
+}}
+}}
+'@
+$rm={rm:.6};$gm={gm:.6};$bm={bm:.6};$brt={brt:.6}
+$ramp=New-Object Gdi32+RAMP
+$ramp.Red=New-Object ushort[] 256
+$ramp.Green=New-Object ushort[] 256
+$ramp.Blue=New-Object ushort[] 256
+for($i=0;$i-lt 256;$i++){{
+$ramp.Red[$i]=[Math]::Min(65535,[int]($i*256*$rm*$brt))
+$ramp.Green[$i]=[Math]::Min(65535,[int]($i*256*$gm*$brt))
+$ramp.Blue[$i]=[Math]::Min(65535,[int]($i*256*$bm*$brt))
+}}
+[Gdi32]::SetDeviceGammaRamp([Gdi32]::GetDC([IntPtr]::Zero),[ref]$ramp)"#,
+        rm = rm, gm = gm, bm = bm, brt = brt
+    );
+
+    std::process::Command::new("powershell")
+        .args([
+            "-NoProfile",
+            "-NonInteractive",
+            "-WindowStyle",
+            "Hidden",
+            "-Command",
+            &script,
+        ])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .map_err(|e| format!("PowerShell spawn failed: {}", e))?;
+
+    Ok(())
+}
+
 /// Check GitHub releases for a newer version.
 #[tauri::command]
 async fn check_for_update() -> Result<serde_json::Value, String> {
@@ -254,6 +340,7 @@ fn main() {
             blocker::save_schedule,
             open_browser_window,
             open_in_app_browser,
+            apply_display_filter,
             check_for_update,
             download_and_install_update,
             show_window,
