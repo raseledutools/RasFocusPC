@@ -333,10 +333,9 @@ function SchedulePage() {
 
 // ─── Browser Page ─────────────────────────────────────────────────────────────
 function BrowserPage() {
-  const [url, setUrl] = useState("https://www.youtube.com");
-  const [inputUrl, setInputUrl] = useState("https://www.youtube.com");
-  const [browserOpen, setBrowserOpen] = useState(false);
+  const [inputUrl, setInputUrl] = useState("");
   const [loading, setLoading] = useState(false);
+  const [lastOpened, setLastOpened] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const quickLinks = [
@@ -348,13 +347,21 @@ function BrowserPage() {
     { label: "Maps", url: "https://maps.google.com", icon: "🗺️" },
   ];
 
-  const openBrowser = async (targetUrl?: string) => {
-    const finalUrl = targetUrl ?? url;
+  const openUrl = async (rawUrl: string) => {
+    let nav = rawUrl.trim();
+    if (!nav) return;
+    if (!nav.startsWith("http://") && !nav.startsWith("https://")) {
+      if (!nav.includes(".") || nav.includes(" ")) {
+        nav = `https://www.google.com/search?q=${encodeURIComponent(nav)}`;
+      } else {
+        nav = `https://${nav}`;
+      }
+    }
     setLoading(true);
     setError(null);
     try {
-      await invoke("open_browser_window", { url: finalUrl });
-      setBrowserOpen(true);
+      await invoke("open_browser_window", { url: nav });
+      setLastOpened(nav);
     } catch (e) {
       setError(String(e));
     } finally {
@@ -362,29 +369,16 @@ function BrowserPage() {
     }
   };
 
-  const handleNavigate = () => {
-    let nav = inputUrl.trim();
-    if (!nav.startsWith("http://") && !nav.startsWith("https://")) {
-      // If no dot or looks like a search query, use Google search
-      if (!nav.includes(".") || nav.includes(" ")) {
-        nav = `https://www.google.com/search?q=${encodeURIComponent(nav)}`;
-      } else {
-        nav = `https://${nav}`;
-      }
-    }
-    setUrl(nav);
-    setInputUrl(nav);
-    openBrowser(nav);
-  };
+  const handleNavigate = () => openUrl(inputUrl);
 
   return (
     <div>
       <div style={{ marginBottom: 16 }}>
         <div className="card-title" style={{ fontSize: 16, marginBottom: 4 }}>
-          🌐 RasFocus Browser
+          🌐 Open in Browser
         </div>
         <div className="card-desc">
-          Ad-free browsing — YouTube ads blocked automatically via hosts file
+          Opens in your default browser — ad blocking via hosts file works automatically
         </div>
       </div>
 
@@ -402,7 +396,7 @@ function BrowserPage() {
           <button
             className="btn btn-primary"
             onClick={handleNavigate}
-            disabled={loading}
+            disabled={loading || !inputUrl.trim()}
             style={{ minWidth: 80 }}
           >
             {loading ? "⏳" : "Open"}
@@ -425,7 +419,7 @@ function BrowserPage() {
           </div>
         )}
 
-        {browserOpen && !error && (
+        {lastOpened && !error && (
           <div
             style={{
               marginTop: 10,
@@ -437,7 +431,7 @@ function BrowserPage() {
               color: "var(--success)",
             }}
           >
-            ✅ Browser window opened — ads are blocked via hosts file
+            ✅ Opened in default browser
           </div>
         )}
       </div>
@@ -457,9 +451,8 @@ function BrowserPage() {
               key={link.url}
               className="btn"
               onClick={() => {
-                setUrl(link.url);
                 setInputUrl(link.url);
-                openBrowser(link.url);
+                openUrl(link.url);
               }}
               style={{
                 display: "flex",
@@ -486,12 +479,12 @@ function BrowserPage() {
 
       {/* Info card */}
       <div className="card">
-        <div className="card-title" style={{ marginBottom: 10, fontSize: 13 }}>How ad blocking works</div>
+        <div className="card-title" style={{ marginBottom: 10, fontSize: 13 }}>How it works</div>
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {[
-            ["🚫", "YouTube Ads Preset", "Enable the 'YouTube (Ads-Free)' preset in Block Presets — it blocks Google ad servers at OS level"],
-            ["🌐", "Opens system WebView", "Browser window uses Windows WebView2 (Edge engine) with your blocked hosts applied"],
-            ["⚡", "No extension needed", "Ad blocking works at the network level — no browser extension required"],
+            ["🚫", "Hosts-level ad blocking", "Enable 'YouTube (Ads-Free)' preset — blocks Google ad servers OS-wide, works in any browser"],
+            ["🌐", "Opens default browser", "Links open in Edge, Chrome, Firefox — whatever is set as default on this PC"],
+            ["⚡", "No extension needed", "Blocking is at the network/OS level, no browser plugin required"],
           ].map(([icon, title, desc]) => (
             <div key={title} style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
               <span style={{ fontSize: 18 }}>{icon}</span>

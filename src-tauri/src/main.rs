@@ -33,38 +33,42 @@ fn relaunch_as_admin() {
     std::process::exit(0);
 }
 
-/// Open a new browser window pointing at the given URL.
+/// Open a URL in the system default browser (Edge, Chrome, Firefox, etc.)
 #[tauri::command]
-fn open_browser_window(app: tauri::AppHandle, url: String) -> Result<(), String> {
+fn open_browser_window(url: String) -> Result<(), String> {
     let safe_url = if url.starts_with("http://") || url.starts_with("https://") {
         url.clone()
     } else {
         format!("https://{}", url)
     };
 
-    let label = format!("browser_{}", std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis());
+    // Use Windows ShellExecute to open in system default browser
+    // This is the most reliable approach - no WebView2 CSP issues
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("cmd")
+            .args(["/C", "start", "", &safe_url])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .map_err(|e| format!("Failed to open browser: {}", e))?;
+    }
 
-    tauri::WebviewWindowBuilder::new(
-        &app,
-        &label,
-        tauri::WebviewUrl::External(safe_url.parse().map_err(|e| format!("Invalid URL: {}", e))?),
-    )
-    .title("RasFocus Browser")
-    .inner_size(1200.0, 800.0)
-    .min_inner_size(800.0, 600.0)
-    .resizable(true)
-    .center()
-    .build()
-    .map_err(|e| format!("Failed to open browser window: {}", e))?;
+    #[cfg(not(target_os = "windows"))]
+    {
+        std::process::Command::new("xdg-open")
+            .arg(&safe_url)
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .map_err(|e| format!("Failed to open browser: {}", e))?;
+    }
 
     Ok(())
 }
 
 /// Check GitHub releases for a newer version.
-/// Returns: { available: bool, version?: string, installed?: bool }
+/// Returns: { available: bool, version?: string, download_url?: string }
 #[tauri::command]
 async fn check_for_update() -> Result<serde_json::Value, String> {
     let current_version = env!("CARGO_PKG_VERSION");
@@ -81,7 +85,6 @@ async fn check_for_update() -> Result<serde_json::Value, String> {
         .map_err(|e| format!("Network error: {}", e))?;
 
     if resp.status() == 404 {
-        // No releases yet
         return Ok(serde_json::json!({ "available": false }));
     }
 
@@ -101,7 +104,6 @@ async fn check_for_update() -> Result<serde_json::Value, String> {
         return Ok(serde_json::json!({ "available": false }));
     }
 
-    // Find the .exe asset download URL
     let download_url = json["assets"]
         .as_array()
         .and_then(|assets| {
