@@ -32,7 +32,15 @@ jobs:
         with:
           workspaces: './src-tauri -> target'
           cache-on-failure: false
-          key: rust-v4
+          key: rust-v5
+
+      - name: Read version from Cargo.toml
+        id: get_version
+        shell: pwsh
+        run: |
+          $ver = (Select-String -Path src-tauri/Cargo.toml -Pattern '^version = "(.+)"').Matches[0].Groups[1].Value
+          echo "VERSION=$ver" >> $env:GITHUB_OUTPUT
+          echo "Version: $ver"
 
       - name: Install frontend dependencies
         id: npm_install
@@ -124,7 +132,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           $repo    = "${{ github.repository }}"
-          $tag     = "latest-build"
+          $version = "${{ steps.get_version.outputs.VERSION }}"
+          $tag     = "v${version}"
           $sha     = "${{ github.sha }}".Substring(0, 7)
           $runNum  = "${{ github.run_number }}"
 
@@ -136,29 +145,28 @@ jobs:
             exit 1
           }
 
-          # Rename to a fixed, predictable filename
+          # Rename to fixed predictable filename
           $destExe = "RasFocusPC-setup.exe"
           Copy-Item $exeFile.FullName -Destination $destExe
+          Write-Host "EXE: $($exeFile.Name) -> $destExe"
 
-          Write-Host "Found exe: $($exeFile.Name) -> $destExe"
-
-          # Delete old 'latest-build' release if it exists (so we can recreate)
-          $existingRelease = gh release view $tag --repo $repo 2>&1
+          # Delete existing release for this tag if any
+          $existing = gh release view $tag --repo $repo 2>&1
           if ($LASTEXITCODE -eq 0) {
-            Write-Host "Deleting old '$tag' release..."
+            Write-Host "Deleting existing release $tag ..."
             gh release delete $tag --repo $repo --yes --cleanup-tag 2>&1
             Start-Sleep -Seconds 3
           }
 
-          # Create fresh release with the single exe
+          # Create release tagged with version
           gh release create $tag `
             --repo $repo `
-            --title "RasFocus PC (Latest Build)" `
-            --notes "**Build:** #${runNum}  |  **Commit:** ${sha}`n`nDownload ``RasFocusPC-setup.exe`` and run as Administrator.`n`nThis release is automatically updated on every push to main." `
+            --title "RasFocus PC v${version}" `
+            --notes "**Version:** ${version}  |  **Build:** #${runNum}  |  **Commit:** ${sha}\`n\`nDownload \`\`RasFocusPC-setup.exe\`\` and run as Administrator.\`n\`nExisting installations will update automatically on next launch." `
             --latest `
             "${destExe}#RasFocusPC-setup.exe"
 
-          Write-Host "Release '$tag' published with $destExe"
+          Write-Host "Release $tag published."
 
       - name: Fail if build failed
         if: steps.npm_install.outcome == 'failure' || steps.tauri_build.outcome == 'failure'

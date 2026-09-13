@@ -504,7 +504,8 @@ type UpdateState =
   | { phase: "idle" }
   | { phase: "checking" }
   | { phase: "up_to_date" }
-  | { phase: "installing"; version: string }
+  | { phase: "available"; version: string; download_url: string }
+  | { phase: "downloading"; version: string }
   | { phase: "done"; version: string }
   | { phase: "error"; msg: string };
 
@@ -523,17 +524,18 @@ export default function App() {
       const result = await invoke<{
         available: boolean;
         version?: string;
-        notes?: string;
-        installed?: boolean;
+        download_url?: string;
       }>("check_for_update");
 
       if (!result.available) {
         setUpdateState({ phase: "up_to_date" });
         setTimeout(() => setUpdateState({ phase: "idle" }), 3000);
-      } else if (result.installed) {
-        setUpdateState({ phase: "done", version: result.version! });
       } else {
-        setUpdateState({ phase: "installing", version: result.version! });
+        setUpdateState({
+          phase: "available",
+          version: result.version!,
+          download_url: result.download_url!,
+        });
       }
     } catch (e) {
       setUpdateState({ phase: "error", msg: String(e) });
@@ -541,14 +543,36 @@ export default function App() {
     }
   };
 
+  const installUpdate = async () => {
+    if (updateState.phase !== "available") return;
+    const { version, download_url } = updateState;
+    setUpdateState({ phase: "downloading", version });
+    try {
+      await invoke("download_and_install_update", { downloadUrl: download_url });
+      // App will exit automatically after install launches
+      setUpdateState({ phase: "done", version });
+    } catch (e) {
+      setUpdateState({ phase: "error", msg: String(e) });
+      setTimeout(() => setUpdateState({ phase: "idle" }), 6000);
+    }
+  };
+
+  // Auto-check on startup (after 3 seconds)
+  useEffect(() => {
+    const timer = setTimeout(checkUpdate, 3000);
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const updateLabel = () => {
     switch (updateState.phase) {
-      case "checking":   return "⏳ Checking…";
-      case "up_to_date": return "✓ Up to date";
-      case "installing": return `⬇️ Installing v${updateState.version}…`;
-      case "done":       return `✅ v${updateState.version} ready — restart to apply`;
-      case "error":      return `⚠️ ${updateState.msg.slice(0, 40)}`;
-      default:           return "⬆️ Check for Updates";
+      case "checking":     return "⏳ Checking…";
+      case "up_to_date":   return "✓ Up to date";
+      case "available":    return `⬆️ Update v${updateState.version} — click to install`;
+      case "downloading":  return `⬇️ Downloading v${updateState.version}…`;
+      case "done":         return `✅ Installing v${updateState.version}…`;
+      case "error":        return `⚠️ ${updateState.msg.slice(0, 40)}`;
+      default:             return "⬆️ Check for Updates";
     }
   };
 
@@ -627,36 +651,54 @@ export default function App() {
         {/* Update button */}
         <button
           className="btn"
-          onClick={checkUpdate}
-          disabled={updateState.phase === "checking" || updateState.phase === "installing"}
+          onClick={updateState.phase === "available" ? installUpdate : checkUpdate}
+          disabled={
+            updateState.phase === "checking" ||
+            updateState.phase === "downloading" ||
+            updateState.phase === "done"
+          }
           style={{
             fontSize: 12,
             padding: "6px 12px",
             background:
-              updateState.phase === "done"
+              updateState.phase === "available"
+                ? "var(--accent)"
+                : updateState.phase === "done" || updateState.phase === "up_to_date"
                 ? "var(--success-soft)"
                 : updateState.phase === "error"
                 ? "var(--danger-soft)"
                 : "var(--bg-card)",
             border: `1.5px solid ${
-              updateState.phase === "done"
+              updateState.phase === "available"
+                ? "var(--accent)"
+                : updateState.phase === "done" || updateState.phase === "up_to_date"
                 ? "var(--success)"
                 : updateState.phase === "error"
                 ? "var(--danger)"
                 : "var(--border)"
             }`,
             color:
-              updateState.phase === "done"
+              updateState.phase === "available"
+                ? "#fff"
+                : updateState.phase === "done" || updateState.phase === "up_to_date"
                 ? "var(--success)"
                 : updateState.phase === "error"
                 ? "var(--danger)"
                 : "var(--text-secondary)",
             cursor:
-              updateState.phase === "checking" || updateState.phase === "installing"
+              updateState.phase === "checking" ||
+              updateState.phase === "downloading" ||
+              updateState.phase === "done"
                 ? "not-allowed"
                 : "pointer",
-            opacity: updateState.phase === "checking" || updateState.phase === "installing" ? 0.7 : 1,
+            opacity:
+              updateState.phase === "checking" ||
+              updateState.phase === "downloading" ||
+              updateState.phase === "done"
+                ? 0.7
+                : 1,
             transition: "all 0.2s",
+            fontWeight: updateState.phase === "available" ? 700 : 500,
           }}
         >
           {updateLabel()}
