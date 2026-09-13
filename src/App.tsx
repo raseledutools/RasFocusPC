@@ -23,7 +23,7 @@ interface Schedule {
   days: string[];
 }
 
-type Page = "dashboard" | "presets" | "custom" | "schedule";
+type Page = "dashboard" | "presets" | "custom" | "schedule" | "browser";
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -331,6 +331,182 @@ function SchedulePage() {
   );
 }
 
+// ─── Browser Page ─────────────────────────────────────────────────────────────
+function BrowserPage() {
+  const [url, setUrl] = useState("https://www.youtube.com");
+  const [inputUrl, setInputUrl] = useState("https://www.youtube.com");
+  const [browserOpen, setBrowserOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const quickLinks = [
+    { label: "YouTube", url: "https://www.youtube.com", icon: "▶️" },
+    { label: "Google", url: "https://www.google.com", icon: "🔍" },
+    { label: "Wikipedia", url: "https://www.wikipedia.org", icon: "📚" },
+    { label: "GitHub", url: "https://www.github.com", icon: "🐙" },
+    { label: "Gmail", url: "https://mail.google.com", icon: "📧" },
+    { label: "Maps", url: "https://maps.google.com", icon: "🗺️" },
+  ];
+
+  const openBrowser = async (targetUrl?: string) => {
+    const finalUrl = targetUrl ?? url;
+    setLoading(true);
+    setError(null);
+    try {
+      await invoke("open_browser_window", { url: finalUrl });
+      setBrowserOpen(true);
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleNavigate = () => {
+    let nav = inputUrl.trim();
+    if (!nav.startsWith("http://") && !nav.startsWith("https://")) {
+      // If no dot or looks like a search query, use Google search
+      if (!nav.includes(".") || nav.includes(" ")) {
+        nav = `https://www.google.com/search?q=${encodeURIComponent(nav)}`;
+      } else {
+        nav = `https://${nav}`;
+      }
+    }
+    setUrl(nav);
+    setInputUrl(nav);
+    openBrowser(nav);
+  };
+
+  return (
+    <div>
+      <div style={{ marginBottom: 16 }}>
+        <div className="card-title" style={{ fontSize: 16, marginBottom: 4 }}>
+          🌐 RasFocus Browser
+        </div>
+        <div className="card-desc">
+          Ad-free browsing — YouTube ads blocked automatically via hosts file
+        </div>
+      </div>
+
+      {/* URL Bar */}
+      <div className="card" style={{ marginBottom: 16 }}>
+        <div className="site-input-row">
+          <input
+            className="site-input"
+            value={inputUrl}
+            onChange={(e) => setInputUrl(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleNavigate()}
+            placeholder="Enter URL or search term…"
+            style={{ flex: 1 }}
+          />
+          <button
+            className="btn btn-primary"
+            onClick={handleNavigate}
+            disabled={loading}
+            style={{ minWidth: 80 }}
+          >
+            {loading ? "⏳" : "Open"}
+          </button>
+        </div>
+
+        {error && (
+          <div
+            style={{
+              marginTop: 10,
+              padding: "8px 12px",
+              borderRadius: 6,
+              background: "var(--danger-soft)",
+              border: "1px solid var(--danger)",
+              fontSize: 12,
+              color: "var(--danger)",
+            }}
+          >
+            ⚠️ {error}
+          </div>
+        )}
+
+        {browserOpen && !error && (
+          <div
+            style={{
+              marginTop: 10,
+              padding: "8px 12px",
+              borderRadius: 6,
+              background: "var(--success-soft)",
+              border: "1px solid var(--success)",
+              fontSize: 12,
+              color: "var(--success)",
+            }}
+          >
+            ✅ Browser window opened — ads are blocked via hosts file
+          </div>
+        )}
+      </div>
+
+      {/* Quick Links */}
+      <div className="card" style={{ marginBottom: 16 }}>
+        <div className="card-title" style={{ marginBottom: 12, fontSize: 13 }}>Quick Links</div>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(3, 1fr)",
+            gap: 10,
+          }}
+        >
+          {quickLinks.map((link) => (
+            <button
+              key={link.url}
+              className="btn"
+              onClick={() => {
+                setUrl(link.url);
+                setInputUrl(link.url);
+                openBrowser(link.url);
+              }}
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: 4,
+                padding: "12px 8px",
+                background: "var(--bg-surface)",
+                border: "1px solid var(--border)",
+                borderRadius: 10,
+                cursor: "pointer",
+                fontSize: 12,
+                fontWeight: 500,
+                color: "var(--text-primary)",
+                transition: "all 0.15s",
+              }}
+            >
+              <span style={{ fontSize: 22 }}>{link.icon}</span>
+              {link.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Info card */}
+      <div className="card">
+        <div className="card-title" style={{ marginBottom: 10, fontSize: 13 }}>How ad blocking works</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {[
+            ["🚫", "YouTube Ads Preset", "Enable the 'YouTube (Ads-Free)' preset in Block Presets — it blocks Google ad servers at OS level"],
+            ["🌐", "Opens system WebView", "Browser window uses Windows WebView2 (Edge engine) with your blocked hosts applied"],
+            ["⚡", "No extension needed", "Ad blocking works at the network level — no browser extension required"],
+          ].map(([icon, title, desc]) => (
+            <div key={title} style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+              <span style={{ fontSize: 18 }}>{icon}</span>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 600 }}>{title}</div>
+                <div style={{ fontSize: 12, color: "var(--text-muted)" }}>{desc}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 type UpdateState =
   | { phase: "idle" }
   | { phase: "checking" }
@@ -444,6 +620,7 @@ export default function App() {
     { id: "presets", icon: "🛡️", label: "Block Presets" },
     { id: "custom", icon: "✏️", label: "Custom Sites" },
     { id: "schedule", icon: "🕐", label: "Schedule" },
+    { id: "browser", icon: "🌐", label: "Browser" },
   ];
 
   return (
@@ -542,6 +719,7 @@ export default function App() {
           <CustomSitesPage sites={customSites} onAdd={addSite} onRemove={removeSite} />
         )}
         {page === "schedule" && <SchedulePage />}
+        {page === "browser" && <BrowserPage />}
       </div>
     </div>
   );
