@@ -1,0 +1,47 @@
+================================================================
+RasFocus PC Build Error Log
+================================================================
+Run Number  : 20
+Commit SHA  : ed947924f41a5d7e17b7d5643f0f7a06a45159e3
+Branch      : main
+Triggered by: raseledutools
+Timestamp   : 2026-09-13_11-23-45
+Runner OS   : Windows
+================================================================
+
+STEP RESULTS:
+- npm_install : success
+- tauri_build : failure
+
+================================================================
+NPM INSTALL LOG:
+================================================================
+
+added 72 packages, and audited 73 packages in 4s
+
+9 packages are looking for funding
+  run `npm fund` for details
+
+2 vulnerabilities (1 moderate, 1 high)
+
+To address all issues (including breaking changes), run:
+  npm audit fix --force
+
+Run `npm audit` for details.
+
+================================================================
+CARGO / RUST BUILD LOG (last 300 lines):
+================================================================
+
+> ras-focus-pc@1.0.0 tauri
+> tauri build --bundles nsis
+
+       Error `"tauri.conf.json"` error on `bundle > windows > nsis`: {"displayLanguageSelector":false,"installMode":"perMachine","shortcutName":"RasFocus PC"} is not valid under any of the schemas listed in the 'anyOf' keyword
+
+================================================================
+ENVIRONMENT:
+================================================================
+Node  : v20.20.2
+NPM   : 10.8.2
+Rust  : rustc 1.98.1 (48a229cea 2026-09-01)
+Cargo : cargo 1.98.1 (797e8a9bc 2026-08-05)
