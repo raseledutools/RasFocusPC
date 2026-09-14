@@ -359,14 +359,16 @@ function DisplayPage() {
   const [mode, setMode]           = useState<DisplayMode>("game");
   const [temp, setTemp]           = useState(6000);
   const [brightness, setBrightness] = useState(90);
-  const [autoDayNight, setAutoDayNight] = useState(true);
+  const [autoDayNight, setAutoDayNight] = useState(false);
   const [timeOfDay, setTimeOfDay] = useState<"day" | "night">("night");
   const [filterStatus, setFilterStatus] = useState<"idle" | "applying" | "ok" | "err">("idle");
 
   const currentMode = DISPLAY_MODES.find(m => m.id === mode)!;
 
-  // Apply display filter to screen whenever temp or brightness changes (debounced 700ms)
+  // Apply display filter whenever temp or brightness changes (debounced 1000ms).
+  // Only fires when autoDayNight is OFF — in auto mode the toggle manages the ramp.
   useEffect(() => {
+    if (autoDayNight) return;
     setFilterStatus("applying");
     const timer = setTimeout(() => {
       invoke("apply_display_filter", { tempK: temp, brightness })
@@ -378,9 +380,9 @@ function DisplayPage() {
           setFilterStatus("err");
           setTimeout(() => setFilterStatus("idle"), 3000);
         });
-    }, 700);
+    }, 1000);
     return () => clearTimeout(timer);
-  }, [temp, brightness]);
+  }, [temp, brightness, autoDayNight]);
 
   const applyMode = (cfg: DisplayModeConfig) => {
     setMode(cfg.id);
@@ -474,7 +476,16 @@ function DisplayPage() {
             {/* Toggle */}
             <div
               className={`dn-toggle${autoDayNight ? " dn-on" : ""}`}
-              onClick={() => setAutoDayNight(v => !v)}
+              onClick={() => {
+                const next = !autoDayNight;
+                setAutoDayNight(next);
+                // When turning OFF, re-apply current manual slider values immediately
+                if (!next) {
+                  invoke("apply_display_filter", { tempK: temp, brightness })
+                    .then(() => { setFilterStatus("ok"); setTimeout(() => setFilterStatus("idle"), 2000); })
+                    .catch(() => { setFilterStatus("err"); setTimeout(() => setFilterStatus("idle"), 3000); });
+                }
+              }}
             >
               <div className="dn-thumb" />
             </div>

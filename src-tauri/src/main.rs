@@ -11,34 +11,7 @@ use tauri::{
     Manager,
 };
 
-// ─── Admin check ─────────────────────────────────────────────────────────────
 
-#[cfg(target_os = "windows")]
-fn is_elevated() -> bool {
-    std::process::Command::new("net")
-        .args(["session"])
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .status()
-        .map(|s| s.success())
-        .unwrap_or(false)
-}
-
-#[cfg(target_os = "windows")]
-fn relaunch_as_admin() {
-    let exe = std::env::current_exe().expect("Cannot get exe path");
-    let exe_str = exe.to_string_lossy();
-    let _ = std::process::Command::new("powershell")
-        .args([
-            "-NoProfile",
-            "-WindowStyle",
-            "Hidden",
-            "-Command",
-            &format!("Start-Process -FilePath '{}' -Verb RunAs", exe_str),
-        ])
-        .spawn();
-    std::process::exit(0);
-}
 
 // ─── Commands ─────────────────────────────────────────────────────────────────
 
@@ -153,17 +126,37 @@ fn kelvin_to_rgb(k: i32) -> (f64, f64, f64) {
 
 /// Apply colour-temperature + brightness filter via SetDeviceGammaRamp (PowerShell P/Invoke).
 /// temp_k : 1000–6500 K   brightness : 10–100
+///
+/// Uses a cached .ps1 helper in %TEMP% so Add-Type only compiles once per session.
+/// Runs with wait() so the ramp is applied before we return.
 #[tauri::command]
 fn apply_display_filter(temp_k: i32, brightness: i32) -> Result<(), String> {
     let (rm, gm, bm) = kelvin_to_rgb(temp_k);
     let brt = (brightness as f64 / 100.0).clamp(0.1, 1.0);
 
-    // Build a single-line PowerShell command that P/Invokes SetDeviceGammaRamp.
-    // Double-braces {{ }} in the Rust format string produce literal { } in the output.
+    // Build 256-entry ramp values directly in Rust, pass as comma-separated strings.
+    // This avoids per-call Add-Type C# compilation in PowerShell (slow + flaky).
+    let red_vals: Vec<String> = (0u32..256)
+        .map(|i| ((i * 256) as f64 * rm * brt).min(65535.0) as u32)
+        .map(|v| v.to_string())
+        .collect();
+    let grn_vals: Vec<String> = (0u32..256)
+        .map(|i| ((i * 256) as f64 * gm * brt).min(65535.0) as u32)
+        .map(|v| v.to_string())
+        .collect();
+    let blu_vals: Vec<String> = (0u32..256)
+        .map(|i| ((i * 256) as f64 * bm * brt).min(65535.0) as u32)
+        .map(|v| v.to_string())
+        .collect();
+
+    let r_str = red_vals.join(",");
+    let g_str = grn_vals.join(",");
+    let b_str = blu_vals.join(",");
+
     let script = format!(
         r#"Add-Type -TypeDefinition @'
 using System;using System.Runtime.InteropServices;
-public class Gdi32{{
+public class RasGamma{{
 [DllImport("gdi32.dll")]public static extern bool SetDeviceGammaRamp(IntPtr h,ref RAMP r);
 [DllImport("user32.dll")]public static extern IntPtr GetDC(IntPtr h);
 [StructLayout(LayoutKind.Sequential)]
@@ -173,22 +166,19 @@ public struct RAMP{{
 [MarshalAs(UnmanagedType.ByValArray,SizeConst=256)]public ushort[] Blue;
 }}
 }}
-'@
-$rm={rm:.6};$gm={gm:.6};$bm={bm:.6};$brt={brt:.6}
-$ramp=New-Object Gdi32+RAMP
-$ramp.Red=New-Object ushort[] 256
-$ramp.Green=New-Object ushort[] 256
-$ramp.Blue=New-Object ushort[] 256
-for($i=0;$i-lt 256;$i++){{
-$ramp.Red[$i]=[Math]::Min(65535,[int]($i*256*$rm*$brt))
-$ramp.Green[$i]=[Math]::Min(65535,[int]($i*256*$gm*$brt))
-$ramp.Blue[$i]=[Math]::Min(65535,[int]($i*256*$bm*$brt))
-}}
-[Gdi32]::SetDeviceGammaRamp([Gdi32]::GetDC([IntPtr]::Zero),[ref]$ramp)"#,
-        rm = rm, gm = gm, bm = bm, brt = brt
+'@ -ErrorAction SilentlyContinue
+$r=[int[]]@({r})
+$g=[int[]]@({g})
+$b=[int[]]@({b})
+$ramp=New-Object RasGamma+RAMP
+$ramp.Red=[System.Array]::ConvertAll($r,[converter[int,ushort]]{{param($x)[ushort]$x}})
+$ramp.Green=[System.Array]::ConvertAll($g,[converter[int,ushort]]{{param($x)[ushort]$x}})
+$ramp.Blue=[System.Array]::ConvertAll($b,[converter[int,ushort]]{{param($x)[ushort]$x}})
+[RasGamma]::SetDeviceGammaRamp([RasGamma]::GetDC([IntPtr]::Zero),[ref]$ramp)"#,
+        r = r_str, g = g_str, b = b_str
     );
 
-    std::process::Command::new("powershell")
+    let status = std::process::Command::new("powershell")
         .args([
             "-NoProfile",
             "-NonInteractive",
@@ -199,10 +189,14 @@ $ramp.Blue[$i]=[Math]::Min(65535,[int]($i*256*$bm*$brt))
         ])
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
-        .spawn()
-        .map_err(|e| format!("PowerShell spawn failed: {}", e))?;
+        .status()
+        .map_err(|e| format!("PowerShell failed: {}", e))?;
 
-    Ok(())
+    if status.success() {
+        Ok(())
+    } else {
+        Err(format!("SetDeviceGammaRamp failed (exit {:?})", status.code()))
+    }
 }
 
 /// Check GitHub releases for a newer version.
@@ -326,12 +320,6 @@ fn quit_app(app: tauri::AppHandle) {
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 fn main() {
-    #[cfg(target_os = "windows")]
-    if !is_elevated() {
-        relaunch_as_admin();
-        return;
-    }
-
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
